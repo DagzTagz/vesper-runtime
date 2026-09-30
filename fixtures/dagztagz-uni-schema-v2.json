@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/DagzTagz/vesper-runtime/blob/main/fixtures/dagztagz-uni-schema-v2.json",
+  "title": "DagzTagz Uni Schema v2",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["universe_id", "schema_version", "character", "memory", "forks"],
+  "properties": {
+    "universe_id": {"type": "string", "minLength": 1},
+    "schema_version": {"type": "string", "minLength": 1},
+    "character": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["id", "callsign", "straussian_level"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "callsign": {"type": "string", "minLength": 1},
+        "straussian_level": {"type": "number"}
+      }
+    },
+    "memory": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["stm", "semantic", "graph", "ltm"],
+      "properties": {
+        "stm": {"type": "array", "items": {"$ref": "#/$defs/memory_item"}},
+        "semantic": {"type": "array", "items": {"$ref": "#/$defs/memory_item"}},
+        "graph": {"type": "array", "items": {"$ref": "#/$defs/edge"}},
+        "ltm": {"type": "array", "items": {"$ref": "#/$defs/memory_item"}}
+      }
+    },
+    "forks": {"type": "array"},
+    "user_weight": {"type": "number", "exclusiveMinimum": 0, "maximum": 2},
+    "seed": {"type": "integer"}
+  },
+  "$defs": {
+    "memory_item": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["id", "ts", "text", "valence", "weight", "tier"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "ts": {"type": "number"},
+        "text": {"type": "string"},
+        "valence": {"type": "number", "minimum": 0, "maximum": 1},
+        "weight": {"type": "number", "minimum": 0, "maximum": 1},
+        "tier": {"type": "string", "enum": ["stm", "semantic", "ltm"]},
+        "pinned": {"type": "boolean"}
+      }
+    },
+    "edge": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["id", "src", "dst", "rel", "weight"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "src": {"type": "string", "minLength": 1},
+        "dst": {"type": "string", "minLength": 1},
+        "rel": {"type": "string", "minLength": 1},
+        "weight": {"type": "number", "minimum": 0, "maximum": 1},
+        "pinned": {"type": "boolean"},
+        "ts": {"type": "number"}
+      }
+    }
+  }
+}

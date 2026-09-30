@@ -1,0 +1,22 @@
+{
+  "universe_id": "uni-drift-001",
+  "schema_version": "2",
+  "character": {
+    "id": "char-drift",
+    "callsign": "drift",
+    "straussian_level": 1
+  },
+  "memory": {
+    "stm": [
+      {
+        "id": "e1",
+        "ts": 1700000000,
+        "text": "a drifted note",
+        "valence": 0.6,
+        "weight": 0.8
+      }
+    ]
+  },
+  "forks": [],
+  "builder_note": "preserve me"
+}

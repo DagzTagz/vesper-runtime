@@ -1,0 +1,48 @@
+{
+  "algo": "ecdsa-p256",
+  "created_unix": 1700036001,
+  "kid": "a864ea75f322bf3b",
+  "memory_root": "207976d2e4d1b8b81152409f9ec12c34318c8b68ecbbc6d7c6b2bb4956b81609",
+  "name": "alpha",
+  "parent_hash": null,
+  "parent_id": null,
+  "public_key_hex": "04e5335fd4e8dc7205b9e3fc2590c4b27ac09d34dea1c9be8e2904547177da98841a4bab39bbb4a3c3adb7b73b72179029b8a32e932b8d7e7432e9008e471f4350",
+  "schema_id": "dagztagz.uni.fork.v2",
+  "schema_version": "2",
+  "signature": "304502205e001bd37e422c59ac966abf48a270244b2eff16dbefeb7594c8774662867cb3022100e4454433b540768bed37bd851ceb47922146913f80a571095a15a8b4402afa2c",
+  "state": {
+    "character": {
+      "callsign": "audit",
+      "id": "char-audit",
+      "straussian_level": 1
+    },
+    "created_unix": 1790809223,
+    "fork_index": {},
+    "forks": [
+      "alpha"
+    ],
+    "head": "alpha",
+    "last_sleep_unix": 1700036000,
+    "memory": {
+      "graph": [],
+      "ltm": [],
+      "semantic": [],
+      "stm": [
+        {
+          "id": "m-4c5c78ac8d30ea82",
+          "pinned": false,
+          "text": "audit sample",
+          "tier": "stm",
+          "ts": 1700000000,
+          "valence": 0.2,
+          "weight": 1.0
+        }
+      ]
+    },
+    "schema_version": "2",
+    "seed": 0,
+    "universe_id": "uni-audit",
+    "user_weight": 1.0
+  },
+  "state_hash": "ecfc88b5d241c993bb573ce717eb85ad0bd8a6d0ba32001e61548f702d254bf9"
+}

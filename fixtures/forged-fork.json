@@ -1,0 +1,36 @@
+{
+  "algo": "ecdsa-p256",
+  "created_unix": 1700000000,
+  "kid": "c0801abfc20e40ea",
+  "memory_root": "56f4cc6b4631986a0a4037a72a9c5b819834d88b5d5e795a6cbb9ad7320ac876",
+  "name": "forged-fork",
+  "parent_hash": null,
+  "parent_id": null,
+  "public_key_hex": "04b279c831067a58460a0e1264e2427d99b86e4b2e64663117e5eaee8f853d2648334d8221f6dd11318ef89160d10b29ed24d14666bc1f987d11d1b66cb54083c8",
+  "schema_id": "dagztagz.uni.fork.v2",
+  "schema_version": "2",
+  "signature": "abababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+  "state": {
+    "character": {
+      "callsign": "forged",
+      "id": "char-forged",
+      "straussian_level": 1
+    },
+    "created_unix": 1700000000,
+    "fork_index": {},
+    "forks": [],
+    "head": null,
+    "last_sleep_unix": null,
+    "memory": {
+      "graph": [],
+      "ltm": [],
+      "semantic": [],
+      "stm": []
+    },
+    "schema_version": "2",
+    "seed": 0,
+    "universe_id": "uni-forged",
+    "user_weight": 1.0
+  },
+  "state_hash": "0ad01cdc68ab8709b702460be962477a1f803fbafb0b25b6e8a31d6a085e22b0"
+}

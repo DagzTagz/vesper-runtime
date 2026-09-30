@@ -1,0 +1,14 @@
+{
+  "task_id": "001-heal-or-die",
+  "pass": true,
+  "checks": {
+    "schema_heal_or_reject": true,
+    "forged_signature_rejected": true,
+    "parent_chain_ok": true,
+    "key_mode_enforced": true,
+    "memory_decay_ran": true,
+    "path_traversal_rejected": true,
+    "no_secrets_in_export": true
+  },
+  "waivers": []
+}

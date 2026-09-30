@@ -1,0 +1,72 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "vesper-runtime"
+version = "0.1.0"
+description = "Local-first universe kernel for DagzTagz Uni. Unofficial community project. Does not call a model API."
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.11"
+authors = [
+  { name = "DagzTagz contributors" },
+]
+keywords = ["dagztagz", "provenance", "schema", "local-first"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Security :: Cryptography",
+]
+dependencies = [
+  "ecdsa>=0.19.1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.3.0",
+]
+
+[project.scripts]
+vesper = "vesper.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/DagzTagz/vesper-runtime"
+Repository = "https://github.com/DagzTagz/vesper-runtime"
+Issues = "https://github.com/DagzTagz/vesper-runtime/issues"
+Security = "https://github.com/DagzTagz/vesper-runtime/blob/main/SECURITY.md"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/vesper"]
+
+[tool.hatch.build.targets.wheel.sources]
+"src/vesper" = "vesper"
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "/src",
+  "/tests",
+  "/fixtures",
+  "/tasks",
+  "/examples",
+  "/README.md",
+  "/LICENSE",
+  "/NOTICE",
+  "/SECURITY.md",
+  "/CHANGELOG.md",
+  "/CONTRIBUTING.md",
+  "/AGENTS.md",
+  "/getting-started.md",
+  "/ROADMAP.md",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+# Test keys live in tmp_path. Do not keep those directories after the run.
+tmp_path_retention_policy = "none"
+tmp_path_retention_count = "0"

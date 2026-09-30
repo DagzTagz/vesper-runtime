@@ -1,0 +1,18 @@
+vesper-runtime
+Copyright 2026 DagzTagz contributors
+
+This product is licensed under the Apache License, Version 2.0.
+See the LICENSE file.
+
+This repository does not vendor third-party source.
+
+Optional runtime dependency, imported only from src/vesper/crypto.py:
+  ecdsa on PyPI (often called python-ecdsa). MIT License.
+  It is not copied into this tree. Install it from PyPI.
+  The project metadata of that package carries its copyright notice.
+
+If that import fails, the kernel uses HMAC-SHA256 from the Python standard
+library. No extra notice is required for the fallback.
+
+Cryptography in this project is limited to SHA-256, HMAC-SHA256, and
+ECDSA P-256 (secp256r1).

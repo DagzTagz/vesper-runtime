@@ -1,0 +1,6 @@
+"""python -m vesper"""
+
+from vesper.cli import main
+
+if __name__ == "__main__":
+    main()
