@@ -30,6 +30,7 @@ The roles this tool does not fill are in [getting-started.md](getting-started.md
 - 2026-09-30: rewrote [docs/audit-export.md](docs/audit-export.md) so each exported file, plan promise, critic heading, and score check is explained in plain language.
 - 2026-09-30: rewrote [docs/commands.md](docs/commands.md) so each command, flag, and verify result is explained in plain language.
 - 2026-09-30: rewrote [docs/forks.md](docs/forks.md) so the signed fields, parent rules, filename rule, and verify order are stated in complete sentences.
+- 2026-09-30: rewrote [docs/glossary.md](docs/glossary.md) so each term is a complete definition followed by the rule this version enforces.
 
 ---
 
