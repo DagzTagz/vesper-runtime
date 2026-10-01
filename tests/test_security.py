@@ -161,6 +161,7 @@ def test_t7_directory_mode_and_permissive_umask(tmp_path: Path) -> None:
         os.umask(old)
     identity = root / "identity"
     key = identity / "edcsa-p256.priv"
+    assert stat.S_IMODE(root.stat().st_mode) == 0o700
     assert stat.S_IMODE(identity.stat().st_mode) == 0o700
     assert stat.S_IMODE(key.stat().st_mode) == 0o600
     os.chmod(identity, 0o755)
@@ -168,6 +169,39 @@ def test_t7_directory_mode_and_permissive_umask(tmp_path: Path) -> None:
         load_identity(identity)
     assert stat.S_IMODE(identity.stat().st_mode) == 0o755
     assert stat.S_IMODE(key.stat().st_mode) == 0o600
+
+
+def test_t1_export_withholds_fork_that_contains_a_marker(tmp_path: Path) -> None:
+    root = tmp_path / "ws"
+    out = tmp_path / "out"
+    marker = "-----BEG" + "IN PRIVATE KEY-----"
+    assert run(["init", "--workspace", str(root), "--callsign", "vesper"]) == 0
+    assert run(["--workspace", str(root), "remember", "--text", marker, "--valence", "0.2", "--now", "10"]) == 0
+    assert run(["--workspace", str(root), "fork", "--name", "alpha", "--now", "20"]) == 0
+    audit = export_audit(root, out)
+    assert audit.passed is False
+    assert audit.score["checks"]["no_secrets_in_export"] is False
+    blob = b"".join(path.read_bytes() for path in out.rglob("*") if path.is_file())
+    assert b"BEGIN" not in blob
+    assert b"PRIVATE" not in blob
+    assert b"-----" not in blob
+    assert (out / "fork_verified.json").read_text(encoding="utf-8") == "null\n"
+
+
+def test_t4_junk_sibling_is_not_a_newer_head(tmp_path: Path) -> None:
+    from vesper.fork import init_workspace, verify_head
+
+    root = tmp_path / "ws"
+    init_workspace(root, "vesper", now=10)
+    assert run(["--workspace", str(root), "remember", "--text", "note", "--valence", "0.2", "--now", "10"]) == 0
+    assert run(["--workspace", str(root), "fork", "--name", "alpha", "--now", "20"]) == 0
+    junk = root / "forks" / "note.json"
+    junk.write_text('{"created_unix": 1900000000}\n', encoding="utf-8")
+    os.chmod(junk, 0o600)
+    broken = root / "forks" / "bad.json"
+    broken.write_text("{", encoding="utf-8")
+    os.chmod(broken, 0o600)
+    assert verify_head(root).ok
 
 
 def test_t8_source_has_no_bare_except() -> None:

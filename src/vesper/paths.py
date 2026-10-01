@@ -192,6 +192,10 @@ def prepare_workspace_dirs(root: Path) -> Workspace:
     if root.is_symlink():
         raise IOPermissionError("workspace root is a symlink")
     root.mkdir(parents=True, exist_ok=True)
+    if root.is_symlink():
+        raise IOPermissionError("workspace root is a symlink")
+    # The directory that holds state.json must not stay at the process umask.
+    fchmod_nofollow(root, 0o700, directory=True)
     ws = Workspace(root)
     ws.require_dir()
     return ws

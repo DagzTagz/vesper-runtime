@@ -1,44 +1,44 @@
 # Roadmap
 
-Unofficial DagzTagz project. Not an xAI, SpaceXAI, or Grok product.
+Unofficial DagzTagz project. Not an xAI, SpaceXAI, or Grok product. This runtime does not call the Grok API. The full list of roles it does not fill is in [getting-started.md](getting-started.md#what-this-tool-is-not).
 
-**This runtime does not call the Grok API.** That stays true in later phases unless a maintainer changes this document and the README in the same release.
+v0.1.0 is experimental. It is a first slice you can run on Ubuntu. It is not a finished product.
 
-v0.1.0 is a Phase 1 MVP. It is experimental. It is not a finished product.
+## Phase 1 — a folder you can check
 
-## Ships in v0.1.0
+This is what v0.1.0 ships. Each line is here because a later reader needs it.
 
-- Local workspace, identity directory `0700`, private key `0600`
-- Four-tier memory with an injected clock
-- Uni Schema v2 check, and heal-or-reject for the in-tree fixture
-- ECDSA P-256 fork signatures, parent hash, and replay checks
-- HMAC-SHA256 only when the `ecdsa` package does not import
-- `vesper export --audit` with plan, evidence, critic, and score
+- A workspace directory at mode `0700`, an identity directory at mode `0700`, and a private key at mode `0600`. You can see who is allowed to read the notes.
+- Four trays of notes, and `sleep`, so a long list does not grow without a rule. The clock can be injected with `--now`, so a test does not wait on the wall clock.
+- Uni Schema v2 check and heal. A file that has lost its identity is refused. A file that is only missing lists can be filled.
+- ECDSA P-256 snapshots, a parent hash, and replay checks. You can see whether a file still matches the key that stamped it.
+- HMAC-SHA256 only when the `ecdsa` package does not import, so the program still has one stamp to check.
+- `vesper export --audit`, so a reviewer can read the checks without the chat and without the private key.
 
-## Not in this repo
+## Out of this repository
 
-These are product decisions, not a backlog in disguise.
+These are choices about what the program is. They are not a hidden backlog.
 
-- No user interface
-- No embeddings and no vector index
-- No network client, no telemetry, no crash report
-- No model API and no Grok API call
-- No wallet, no coin, no payment, no seed phrase
-- No money-transmitter flow and no security offering
-- No anonymity network, no traffic padding, no steganography
-- No custom cipher and no unpublished cryptography
-- No in-place key rotation command (the manual procedure is in [getting-started.md](getting-started.md))
-- No multi-user access control
+- No user interface. The terminal transcript is the thing you can copy into a review.
+- No embeddings and no vector index. v0.1 ranks notes with the sleep rules, which you can recompute.
+- No network client, no telemetry, and no crash report. The program does not talk to the internet.
+- No model API and no Grok API call. Editing the repo in Grok Build is your account. Running `vesper` is not.
+- No wallet, no coin, no payment, and no seed phrase. The key only signs JSON. People should not treat it as money.
+- No money-transmitter flow and no security offering. The project does not hold customer funds.
+- No anonymity network, no traffic padding, and no steganography. Local files are as private as the account and the disk.
+- No custom cipher and no unpublished cryptography. A reviewer can look up P-256 and HMAC-SHA256.
+- No in-place key rotation command. The manual steps are in [getting-started.md](getting-started.md). A rotate that chmod'd a weak file would hide a mistake.
+- No multi-user access control. Modes `0700` and `0600` are the whole sharing story in v0.1.
 
-## Later, still local
+## Later, still on your computer
 
-A later version may add these if a skeptic can still audit the folder. None of them are promised by a date.
+A later version may add these. None of them has a date.
 
-- A documented rotate that writes a new key beside the old one and signs a fork that names both kids, without ever chmod'ing a weak file
-- Schema drafts beyond the minimal v2 fixture, still with reject-on-missing-identity
-- Stronger parent-chain rules when two forks were signed by different kids
-- A Dagz-Scaffold reader that consumes `score.json` without copying this kernel’s private keys
+- A documented rotate that writes a new key beside the old one and signs a snapshot naming both kids. You could retire a key without chmod'ing a weak file, and old snapshots would still name the key that signed them.
+- Schema drafts past the small v2 fixture, still refusing a file with no identity. More fields can be added without the program guessing who the notes belong to.
+- Clearer parent-chain rules when two snapshots were signed by different kids. A reviewer could see a key change instead of treating it as a bad stamp.
+- A Dagz-Scaffold reader that consumes `score.json` without copying this program's private keys. The audit folder would stay the handoff.
 
 ## How a phase changes
 
-A phase change is a changelog entry, a test that fails if the new rule is skipped, and an export a person can read. Quitting with a green suite that never called `verify` on `fixtures/forged-fork.json` is not a phase change.
+A phase change is a changelog entry, a test that fails if the new rule is skipped, and an export a person can read. A green suite that never called `verify` on `fixtures/forged-fork.json` is not a phase change.

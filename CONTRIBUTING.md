@@ -1,10 +1,16 @@
 # Contributing to vesper-runtime
 
-Unofficial DagzTagz project. Not an xAI, SpaceXAI, or Grok product.
+Unofficial DagzTagz project. Not an xAI, SpaceXAI, or Grok product. This runtime does not call the Grok API. The full list of roles it does not fill is in [getting-started.md](getting-started.md#what-this-tool-is-not).
 
-This is a community repository under the DagzTagz name. DagzTagz owns it. Grok Build may draft a patch under the contributor’s own account and terms. Humans review the patch. The runtime does not call the Grok API.
+This is a community repository under the DagzTagz name. DagzTagz owns it. Grok Build may draft a patch under the contributor’s own account and terms. Humans review the patch.
 
 You do not need to be a cryptographer to help. A clear bug report, a doc fix, and a careful reading of `evidence.md` all count.
+
+## Smallest useful patch
+
+Send the smallest change that fixes one mistake.
+
+A doc sentence that was wrong is enough. A code fix needs a test that fails before the change and passes after it. Do not bundle a new command with a wording change. Do not rename `identity/edcsa-p256.priv` in a v0.1 patch. That spelling is the on-disk name.
 
 ## Before you start
 
@@ -26,7 +32,7 @@ Security reports go through [SECURITY.md](SECURITY.md). Do not file them as publ
 - Test keys are generated at test time and destroyed with the temp directory. Do not commit a private key, a `.env`, or `workspace/`.
 - No GPL-incompatible copyleft.
 - Do not vendor the `ecdsa` package. Notice it in [NOTICE](NOTICE).
-- Apache-2.0. Copyright DagzTagz contributors. The work is AS IS.
+- Apache-2.0. Copyright DagzTagz contributors. The work is AS IS. There is no warranty of fitness for a particular purpose, no warranty of merchantability, and no warranty of non-infringement.
 
 ## Setup
 
@@ -39,7 +45,9 @@ pip install -e ".[dev]"
 python -m pytest -q
 ```
 
-What good looks like: pytest exits 0.
+What good looks like: pytest exits 0 and the summary line ends in `passed`.
+
+What failure means: a `failed` line is the patch you have not made yet, or a local key file the tests refused. Do not chmod a key to get a green line.
 
 Work on a branch. Fork if you do not have write access.
 
@@ -53,6 +61,7 @@ In particular:
 - Decay must move a weight when `now` is later than `ts`, and must not move it when `now == ts`
 - A mode `0644` key must be refused and left at `0644`
 - A name containing `..` must be rejected
+- `schema heal --write` on a mode `0600` file must leave it at `0600`
 
 `vesper export --audit` on a real workspace is the bundle a reviewer can read. Do not hand-edit `score.json` to flip `"pass"` to true.
 

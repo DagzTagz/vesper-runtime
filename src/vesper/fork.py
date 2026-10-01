@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from vesper import crypto as crypto_mod
 from vesper.crypto import (
     Identity,
     canonical_bytes,
@@ -31,7 +32,9 @@ from vesper.crypto import (
 from vesper.errors import CryptoError, IOPermissionError, ValidationError
 from vesper.memory import empty_memory, parse_user_weight
 from vesper.paths import (
+    ECDSA_KEY_FILENAME,
     FORKS_DIRNAME,
+    HMAC_KEY_FILENAME,
     IDENTITY_DIRNAME,
     STATE_FILENAME,
     Workspace,
@@ -108,8 +111,9 @@ def init_workspace(
         raise ValidationError("workspace path rejects '..'")
     identity_dir = Path(root) / IDENTITY_DIRNAME
     if dry_run:
+        key_name = HMAC_KEY_FILENAME if not crypto_mod.ecdsa_available() else ECDSA_KEY_FILENAME
         print(f"dry-run: would create {identity_dir} mode 0700")
-        print(f"dry-run: would write {identity_dir / 'edcsa-p256.priv'} mode 0600")
+        print(f"dry-run: would write {identity_dir / key_name} mode 0600")
         print(f"dry-run: would write {identity_dir / 'public.json'} mode 0644")
         print(f"dry-run: would write {Path(root) / STATE_FILENAME} mode 0600")
         print(f"dry-run: would create {Path(root) / FORKS_DIRNAME} mode 0700")
@@ -315,10 +319,17 @@ def verify_head(root: Path, *, allow_orphan: bool = False) -> VerifyResult:
             return VerifyResult(False, "name")
         if entry.stem == head:
             continue
-        other = loads_strict(entry.read_text(encoding="utf-8"))
-        if isinstance(other, dict) and isinstance(other.get("created_unix"), int):
-            if other["created_unix"] > head_ts:
-                return VerifyResult(False, "replay", signature_prefix=result.signature_prefix)
+        try:
+            other = verify_fork_file(entry, identity=identity, allow_orphan=allow_orphan)
+        except (ValidationError, CryptoError, IOPermissionError, OSError):
+            return VerifyResult(False, "canonical", signature_prefix=result.signature_prefix)
+        if not other.ok or other.document is None:
+            continue
+        other_ts = other.document.get("created_unix")
+        if isinstance(other_ts, bool) or not isinstance(other_ts, int):
+            continue
+        if other_ts > head_ts:
+            return VerifyResult(False, "replay", signature_prefix=result.signature_prefix)
     return result
 
 

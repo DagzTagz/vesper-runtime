@@ -108,10 +108,14 @@ def export_audit(workspace: Path, out_dir: Path) -> Audit:
             checks=checks,
             waivers=waivers,
             state_hash=state_hash,
-            fork_bytes=fork_bytes,
-            scan_line="secret-marker scan found a hit; raw match text was not copied",
+            fork_bytes=None,
+            scan_line="secret-marker scan found a hit; the fork copy was withheld",
             passed=False,
         )
+        scan_code, scan_hits = _scan(out_dir)
+        if scan_hits or scan_code != 1:
+            checks["no_secrets_in_export"] = False
+            passed = False
     verdict = _verdict(passed, waivers)
     score = _score(passed, checks, waivers)
     return Audit(passed, verdict, score, out_dir)

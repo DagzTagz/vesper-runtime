@@ -142,3 +142,16 @@ def test_hmac_fallback_roundtrip(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     assert key not in public.encode("utf-8")
     assert run(["--workspace", str(root), "verify", str(path)]) == 0
     assert run(["--workspace", str(tmp_path / "missing"), "verify", str(path)]) == 3
+    assert key not in repr(identity).encode("utf-8")
+
+
+def test_hmac_dry_run_names_hmac_key(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    import vesper.crypto as crypto
+
+    monkeypatch.setattr(crypto, "ecdsa_available", lambda: False)
+    root = tmp_path / "ws"
+    assert run(["--dry-run", "init", "--workspace", str(root), "--callsign", "hmac-user"]) == 0
+    text = capsys.readouterr().out
+    assert "hmac.key" in text
+    assert "edcsa-p256.priv" not in text
+    assert not root.exists()

@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import stat
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -292,6 +293,27 @@ def check_document(document: object, schema: dict[str, Any] | None = None) -> li
     return validate(schema, document)
 
 
+def _write_mode(path: Path) -> int:
+    """Keep a private mode. A new file, or a looser one, stays 0644."""
+    default = 0o644
+    if not path.exists():
+        return default
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    except OSError:
+        return default
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode):
+            return default
+        current = stat.S_IMODE(info.st_mode)
+    finally:
+        os.close(fd)
+    if current == 0 or current & ~0o644:
+        return default
+    return current
+
+
 def write_json_atomic(path: Path, document: dict[str, Any]) -> None:
     """Replace a regular file. Refuse a symlink so the write cannot leave the named path."""
     if ".." in path.parts:
@@ -301,11 +323,12 @@ def write_json_atomic(path: Path, document: dict[str, Any]) -> None:
     parent = path.parent
     if not parent.is_dir():
         raise IOPermissionError("destination directory is missing")
+    mode = _write_mode(path)
     payload = json.dumps(document, sort_keys=True, indent=2, allow_nan=False, ensure_ascii=False) + "\n"
     fd, tmp_name = tempfile.mkstemp(dir=parent, prefix=".vesper-", suffix=".tmp")
     try:
         os.write(fd, payload.encode("utf-8"))
-        os.fchmod(fd, 0o644)
+        os.fchmod(fd, mode)
         os.fsync(fd)
     finally:
         os.close(fd)

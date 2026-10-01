@@ -24,7 +24,7 @@ import hmac
 import json
 import os
 import stat
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -100,8 +100,8 @@ class Identity:
     kid: str
     public_key_hex: str | None
     public_doc: dict[str, Any]
-    _ecdsa_key: object | None
-    _hmac_key: bytes | None
+    _ecdsa_key: object | None = field(repr=False)
+    _hmac_key: bytes | None = field(repr=False)
 
     def verify_canonical(self, body: dict[str, Any], signature_hex: str) -> None:
         """Check a signature with this identity. Key bytes stay in this module."""

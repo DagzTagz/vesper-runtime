@@ -1,10 +1,20 @@
 # Security Policy
 
-Unofficial DagzTagz project. Not an xAI, SpaceXAI, or Grok product.
+Unofficial DagzTagz project. Not an xAI, SpaceXAI, or Grok product. This runtime does not call the Grok API.
 
-vesper-runtime is a local development and provenance tool. It signs JSON with ECDSA P-256, or with HMAC-SHA256 if the `ecdsa` package cannot be imported. It is not a wallet, not a money transmitter, not a security offering, not an official scientific instrument, and not an anonymity system.
+vesper-runtime is a local development and provenance tool. It signs JSON with ECDSA P-256, or with HMAC-SHA256 if the `ecdsa` package cannot be imported. You type commands in a terminal. The notes and the key stay in a folder you name.
+
+This document is not legal advice. The license is the warranty text. You are responsible for the key and the files.
+
+The tool is not a wallet, not a money transmitter, not a security offering, not an official scientific instrument, and not an anonymity system. A successful `verify` does not prove a legal identity.
+
+There is no HIPAA claim, no SOC 2 claim, and no certification. Privacy is the privacy of this Unix account and this disk. The CLI does not open a network connection and does not send crashes or analytics. `git` on your machine is a network path only when you run git.
+
+HMAC-SHA256 and ECDSA P-256 are published algorithms. This project does not implement a custom cipher, steganography, or traffic obfuscation. There is no unpublished algorithm.
 
 No bounty is offered.
+
+The work is provided **AS IS**, under Apache-2.0. There is no warranty of fitness for a particular purpose, no warranty of merchantability, and no warranty of non-infringement.
 
 ## Supported versions
 
@@ -53,35 +63,34 @@ Out of scope: general bugs, style nits, theoretical issues with no local impact,
 
 ## Threat model
 
-The kernel is written against these failures.
+These are the failures the program is written against. A plain version, including what you would see on the terminal, is in [docs/threat-model.md](docs/threat-model.md).
 
 | Id | Failure | What the code does |
 |----|---------|--------------------|
-| T1 | A private key lands in git, a log, `evidence.md`, or a world-readable file | Key bytes stay in `crypto.py`. Export refuses to copy `identity/`. Evidence omits output that contains PEM-shaped fragments. |
+| T1 | A private key lands in git, a log, `evidence.md`, or a world-readable file | Key bytes stay in `crypto.py`. Export does not copy `identity/`. If a verified fork contains PEM-shaped text, `fork_verified.json` is replaced with JSON `null`, the scan line does not repeat the marker, and `pass` stays false. |
 | T2 | Schema drift: missing fields, wrong types, unknown properties | `schema check` reports problems. `schema heal` fills documented structural defaults. It rejects a missing character id, universe id, schema version, or forks list. Unknown properties are kept. Reserved names `__proto__`, `constructor`, and `prototype` are rejected. |
-| T3 | Fork forgery: wrong key, mutated body, detached signature | `verify` rebuilds the canonical body, checks the key id, and checks the signature. |
-| T4 | A parent link breaks, or an old snapshot is replayed as the new head | `parent_hash` must match the parent file. The filename stem must match `name`. `created_unix` must not go backwards. An identical `state_hash` to the parent is a replay. |
-| T5 | Memory poisoning: unbounded STM, NaN weights, path characters in ids | STM cap is 100. Non-finite weights are rejected. Ids are a single safe segment. |
-| T6 | Paths escape the workspace | The workspace root is explicit. `..`, absolute paths, and symlinks that leave the root are rejected. |
-| T7 | A process uses a mode `0644` private key | The key is opened with `O_NOFOLLOW`. Mode is `fstat` on that descriptor. Anything other than `0600` is refused and is not chmod'd into shape. The identity directory must be `0700`. |
+| T3 | Fork forgery: wrong key, mutated body, detached signature | `verify` rebuilds the canonical body, checks the key id, and checks the signature. A kid that does not match the public point is reason `kid` before `bad_signature`. |
+| T4 | A parent link breaks, or an old snapshot is replayed as the new head | `parent_hash` must match the parent file. The filename stem must match `name`. `created_unix` must not go backwards. An identical `state_hash` to the parent is a replay. `verify --head` ignores a sibling that does not verify. A sibling that verifies with a larger `created_unix` is a replay. JSON `true` is not a timestamp. |
+| T5 | Memory poisoning: unbounded STM, NaN weights, path characters in ids | STM cap is 100. Non-finite weights are rejected. Ids are a single safe segment: `[A-Za-z0-9._-]`, length 1..128, no `..`. |
+| T6 | Paths escape the workspace | The workspace root is explicit. `..`, absolute paths, and symlinks that leave the root are rejected. A symlinked workspace root is refused. |
+| T7 | A process uses a mode `0644` private key, or a workspace directory other accounts can replace | The key is opened with `O_NOFOLLOW`. Mode is `fstat` on that descriptor. Anything other than `0600` is refused and is not chmod'd into shape. The identity directory must be `0700`. Init sets the workspace directory you named to `0700` and does not chmod its parents. `schema heal --write` keeps an existing mode that is a non-zero subset of `0644`. |
 | T8 | Tests are green while forged-signature or decay cases never ran | `vesper export` runs those checks and writes the commands into `evidence.md`. A suite that skipped them does not get `"pass": true`. |
 
 ## Keys
 
-- Algorithm: ECDSA on NIST P-256 (`secp256r1`) via the PyPI package `ecdsa`, isolated in `src/vesper/crypto.py`.
+- Algorithm: ECDSA on NIST P-256 (`secp256r1`) via the PyPI package `ecdsa`, isolated in `src/vesper/crypto.py`. This key is not a Bitcoin key. It only signs JSON.
 - Signed bytes: UTF-8 JSON, `sort_keys=True`, separators `(',', ':')`, no NaN or Infinity. ECDSA signs the 32-byte SHA-256 digest with `sign_digest` and DER encoding. The stored signature is hex.
 - Key id: first 16 hex characters of SHA-256 over the uncompressed public point (`0x04 || X || Y`). The truncation identifies a key. The signature is the check.
-- On-disk name: `identity/edcsa-p256.priv`. Directory mode `0700`. File mode `0600`. `public.json` is `0644` and contains the kid, the algorithm, and the public point hex. It does not contain a PEM block.
-- Fallback: if `import ecdsa` fails, the kernel writes `identity/hmac.key` and authenticates the canonical bytes with HMAC-SHA256. `public.json` then stores the kid only. HMAC verify loads that key from the workspace. ECDSA verify uses the public point inside the fork file.
+- On-disk name: `identity/edcsa-p256.priv`. The spelling `edcsa` is the v0.1 name. Do not rename it in this version. Directory mode `0700`. File mode `0600`. `public.json` is `0644` and contains the kid, the algorithm, and the public point hex. It does not contain a PEM block.
+- Fallback: if `import ecdsa` fails, the kernel writes `identity/hmac.key` and authenticates the canonical bytes with HMAC-SHA256. `public.json` then stores the kid only. HMAC verify loads that key from the workspace. ECDSA verify uses the public point inside the fork file. Dry-run init prints the filename that matches this choice.
+- Two secret files in one identity directory are refused. An existing identity directory is not overwritten.
 - Tests generate keys in a temporary directory. pytest is set to keep none of those directories (`tmp_path_retention_policy = none`). Do not commit a key so a test can stay offline.
-- A killed test run can still leave a key under `/tmp/pytest-of-*`. Shred the key file, then remove that tree, before you pack a release. Unlinking a name does not scrub freed disk blocks. This tool does not offer a free-space wipe.
-- The tool never logs the private key. Parser errors must not echo key material.
-
-HMAC-SHA256 and ECDSA P-256 are published algorithms. This project does not implement a custom cipher, steganography, or traffic obfuscation. There is no unpublished algorithm and no “military-grade” claim.
+- A killed test run can still leave a key under `/tmp/pytest-of-*`. Shred the key file, then remove that tree, before you pack a release. `shred -u -n 1` overwrites the named file once and unlinks it. On an SSD, a copy-on-write disk, or some VM disks, that overwrite may not reach the old blocks. This tool does not wipe free space.
+- The tool never logs the private key. Parser errors must not echo key material. The identity object's text form does not include key bytes.
 
 ## Local policy
 
-The CLI does not open a network connection. It does not send crashes or analytics. Privacy is the privacy of this Unix account and this disk. This document is not a HIPAA claim, a SOC 2 claim, or a certification.
+The CLI does not open a network connection. It does not send crashes or analytics. Privacy is the privacy of this Unix account and this disk.
 
 `git` on the operator’s machine is the only network path, and only when a person runs git.
 
@@ -94,4 +103,4 @@ Research is welcome when you:
 - Do not use the finding except to report it
 - Report through the private channels above
 
-A public pull request that contains a live private key is not a report. Rotate that key. Then send the private advisory.
+A public pull request that contains a live private key is not a report. Stop using that key. Then send the private advisory.

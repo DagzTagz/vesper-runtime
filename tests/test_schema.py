@@ -1,6 +1,8 @@
 """Schema check and heal-or-reject."""
 
 import json
+import os
+import stat
 from pathlib import Path
 
 import pytest
@@ -75,6 +77,19 @@ def test_reserved_name_rejected() -> None:
     document["__proto__"] = "nope"
     with pytest.raises(ValidationError, match="reserved"):
         heal(document)
+
+
+def test_heal_write_keeps_private_mode(tmp_path: Path) -> None:
+    path = tmp_path / "state.json"
+    path.write_text(DRIFTED.read_text(encoding="utf-8"), encoding="utf-8")
+    os.chmod(path, 0o600)
+    assert run(["schema", "heal", str(path), "--write"]) == 0
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+    open_copy = tmp_path / "open.json"
+    open_copy.write_text(DRIFTED.read_text(encoding="utf-8"), encoding="utf-8")
+    os.chmod(open_copy, 0o644)
+    assert run(["schema", "heal", str(open_copy), "--write"]) == 0
+    assert stat.S_IMODE(open_copy.stat().st_mode) == 0o644
 
 
 def test_non_finite_rejected() -> None:
