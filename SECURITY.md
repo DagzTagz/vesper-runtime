@@ -41,6 +41,8 @@ Subject: `[SECURITY] vesper-runtime`
 
 Say that a key was exposed. Do not attach the key. If you own the key, stop signing with it and init a new workspace. See [getting-started.md](getting-started.md).
 
+Findings we have already reviewed, including dependency alerts that have no patched release, are written in [disclosurebulletins.md](disclosurebulletins.md). A bulletin is the public record of what we know and what we decided. It is not a substitute for the private report above.
+
 ## What to include
 
 1. A one- or two-sentence summary

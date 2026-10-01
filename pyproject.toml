@@ -57,6 +57,7 @@ include = [
   "/LICENSE",
   "/NOTICE",
   "/SECURITY.md",
+  "/disclosurebulletins.md",
   "/CHANGELOG.md",
   "/CONTRIBUTING.md",
   "/AGENTS.md",

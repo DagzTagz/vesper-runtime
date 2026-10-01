@@ -337,4 +337,5 @@ Stop here if you only wanted to see a signed snapshot.
 | Which failures are in scope | [docs/threat-model.md](docs/threat-model.md) |
 | Short answers | [docs/faq.md](docs/faq.md) |
 | How to report a vulnerability | [SECURITY.md](SECURITY.md) |
+| A security finding we already logged | [disclosurebulletins.md](disclosurebulletins.md) |
 | The reviewer gate | [tasks/001-heal-or-die.md](tasks/001-heal-or-die.md) |

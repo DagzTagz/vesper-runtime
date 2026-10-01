@@ -81,6 +81,7 @@ What failure means: if `vesper` is not found, the virtual environment is not act
 | See the failures we planned for | [docs/threat-model.md](docs/threat-model.md) |
 | Get a short answer | [docs/faq.md](docs/faq.md) |
 | Report a vulnerability | [SECURITY.md](SECURITY.md) |
+| Read a security finding we already logged | [disclosurebulletins.md](disclosurebulletins.md) |
 | Run the reviewer gate | [tasks/001-heal-or-die.md](tasks/001-heal-or-die.md) |
 | See what changed | [CHANGELOG.md](CHANGELOG.md) |
 | See what we will not add | [ROADMAP.md](ROADMAP.md) |

@@ -15,7 +15,7 @@ A doc sentence that was wrong is enough. A code fix needs a test that fails befo
 ## Before you start
 
 1. Read [README.md](README.md) and [getting-started.md](getting-started.md).
-2. Read [SECURITY.md](SECURITY.md) before you touch keys or `crypto.py`.
+2. Read [SECURITY.md](SECURITY.md) and [disclosurebulletins.md](disclosurebulletins.md) before you touch keys, `crypto.py`, or `pyproject.toml` dependencies.
 3. Read [ROADMAP.md](ROADMAP.md) so a patch does not add a wallet, a network client, or a model call.
 
 Small fixes can be a pull request. A new signature scheme, a new dependency, or a license change needs an issue first.
