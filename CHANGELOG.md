@@ -33,6 +33,7 @@ The roles this tool does not fill are in [getting-started.md](getting-started.md
 - 2026-09-30: rewrote [docs/glossary.md](docs/glossary.md) so each term is a complete definition followed by the rule this version enforces.
 - 2026-09-30: rewrote [docs/memory.md](docs/memory.md) so the four lists, the thresholds, and the sleep order match the implementation.
 - 2026-09-30: rewrote [docs/schema.md](docs/schema.md) so check and heal state the fields, the defaults, and the refusals the code enforces.
+- 2026-09-30: rewrote [docs/threat-model.md](docs/threat-model.md) so T1 through T8 match the checks the code runs, including the limits those checks do not cover.
 
 ---
 
