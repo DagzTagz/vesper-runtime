@@ -25,6 +25,8 @@ from typing import Any, ClassVar
 
 from vesper import crypto as crypto_mod
 from vesper.crypto import (
+    EcdsaIdentity,
+    HmacIdentity,
     Identity,
     canonical_bytes,
     generate_identity,
@@ -580,7 +582,7 @@ def _verify_sig(algo: object, body: dict[str, Any], signature: str, identity: Id
         )
         return
     if algo == "hmac-sha256":
-        if identity is None or identity.algo != "hmac-sha256":
+        if not isinstance(identity, HmacIdentity):
             raise CryptoError("bad_signature")
         if not isinstance(body.get("kid"), str) or not _digest_eq(identity.kid, body["kid"]):
             raise CryptoError("kid")
@@ -611,7 +613,7 @@ def _body(
         "state": state,
         "state_hash": sha256_hex(canonical_bytes(state)),
     }
-    if identity.algo == "ecdsa-p256":
+    if isinstance(identity, EcdsaIdentity):
         body["public_key_hex"] = identity.public_key_hex
     else:
         body["hmac_kid"] = identity.kid

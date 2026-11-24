@@ -26,7 +26,7 @@ import os
 import stat
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from vesper.errors import CryptoError, IOPermissionError, ValidationError
 from vesper.paths import (
@@ -92,43 +92,62 @@ def sha256_digest(data: bytes) -> bytes:
     return hashlib.sha256(data).digest()
 
 
-@dataclass
-class Identity:
-    """Loaded identity. Private bytes stay on this object."""
+@dataclass(frozen=True)
+class EcdsaIdentity:
+    """ECDSA P-256 identity. The private key stays on this object."""
 
-    algo: str
     kid: str
-    public_key_hex: str | None
+    public_key_hex: str
     public_doc: dict[str, Any]
-    _ecdsa_key: object | None = field(repr=False)
-    _hmac_key: bytes | None = field(repr=False)
+    _key: object = field(repr=False)
+    algo: ClassVar[str] = "ecdsa-p256"
 
     def verify_canonical(self, body: dict[str, Any], signature_hex: str) -> None:
-        """Check a signature with this identity. Key bytes stay in this module."""
         verify_signature(
             algo=self.algo,
             body=body,
             signature_hex=signature_hex,
             public_key_hex=self.public_key_hex,
-            hmac_key=self._hmac_key,
+            hmac_key=None,
         )
 
     def sign_canonical(self, body: dict[str, Any]) -> str:
-        raw = canonical_bytes(body)
-        if self.algo == "ecdsa-p256":
-            backend = _load_ecdsa()
-            if backend is None or self._ecdsa_key is None:
-                raise CryptoError("ECDSA backend is not available")
-            signature = self._ecdsa_key.sign_digest(  # type: ignore[attr-defined]
-                sha256_digest(raw),
-                sigencode=backend["sigencode_der"],
-            )
-            return signature.hex()
-        if self.algo == "hmac-sha256":
-            if self._hmac_key is None:
-                raise CryptoError("HMAC key is not loaded")
-            return hmac.new(self._hmac_key, raw, hashlib.sha256).hexdigest()
-        raise CryptoError("unknown signature algorithm")
+        backend = _load_ecdsa()
+        if backend is None:
+            raise CryptoError("ECDSA backend is not available")
+        signature = self._key.sign_digest(  # type: ignore[attr-defined]
+            sha256_digest(canonical_bytes(body)),
+            sigencode=backend["sigencode_der"],
+        )
+        return signature.hex()
+
+
+@dataclass(frozen=True)
+class HmacIdentity:
+    """HMAC-SHA256 fallback identity. It has no public point."""
+
+    kid: str
+    public_doc: dict[str, Any]
+    _key: bytes = field(repr=False)
+    algo: ClassVar[str] = "hmac-sha256"
+    public_key_hex: ClassVar[None] = None
+
+    def verify_canonical(self, body: dict[str, Any], signature_hex: str) -> None:
+        verify_signature(
+            algo=self.algo,
+            body=body,
+            signature_hex=signature_hex,
+            public_key_hex=None,
+            hmac_key=self._key,
+        )
+
+    def sign_canonical(self, body: dict[str, Any]) -> str:
+        return hmac.new(self._key, canonical_bytes(body), hashlib.sha256).hexdigest()
+
+
+# A loaded identity is exactly one of these. The algorithm is the type, so an
+# ECDSA identity without a key, or one holding both keys, cannot be built.
+Identity = EcdsaIdentity | HmacIdentity
 
 
 def _kid_from_uncompressed(point: bytes) -> str:
@@ -265,14 +284,14 @@ def generate_identity(identity_dir: Path) -> Identity:
             "public_key_hex": uncompressed.hex(),
         }
         _write_public(identity_dir / PUBLIC_FILENAME, public)
-        return Identity("ecdsa-p256", kid, uncompressed.hex(), public, key, None)
+        return EcdsaIdentity(kid, uncompressed.hex(), public, key)
 
     key_bytes = os.urandom(32)
     _write_secret(identity_dir / HMAC_KEY_FILENAME, key_bytes)
     kid = sha256_hex(key_bytes)[:16]
     public = {"algo": "hmac-sha256", "hmac_kid": kid, "kid": kid}
     _write_public(identity_dir / PUBLIC_FILENAME, public)
-    return Identity("hmac-sha256", kid, None, public, None, key_bytes)
+    return HmacIdentity(kid, public, key_bytes)
 
 
 def refuse_insecure_key(path: Path) -> None:
@@ -305,13 +324,13 @@ def load_identity(identity_dir: Path) -> Identity:
             raise CryptoError("public identity does not match the key file")
         if _public_key_kid(public_hex) != kid:
             raise CryptoError("kid does not match the public key")
-        return Identity(algo, kid, public_hex, public, key, None)
+        return EcdsaIdentity(kid, public_hex, public, key)
     if algo == "hmac-sha256":
         raw = _read_secret(hmac_path)
         kid = sha256_hex(raw)[:16]
         if public.get("kid") != kid or public.get("hmac_kid") != kid:
             raise CryptoError("public identity does not match the key file")
-        return Identity(algo, kid, None, public, None, raw)
+        return HmacIdentity(kid, public, raw)
     raise CryptoError("unknown identity algorithm")
 
 
