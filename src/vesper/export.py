@@ -22,7 +22,15 @@ from vesper.crypto import canonical_bytes, load_identity, refuse_insecure_key, s
 from vesper.errors import IOPermissionError, ValidationError
 from vesper.fork import init_workspace, load_state, verify_fork_file, verify_head
 from vesper.memory import empty_memory, new_item, remember, sleep_state
-from vesper.paths import IDENTITY_DIRNAME, Workspace, assert_mode, fchmod_nofollow, write_nofollow
+from vesper.paths import (
+    ECDSA_KEY_FILENAME,
+    HMAC_KEY_FILENAME,
+    IDENTITY_DIRNAME,
+    Workspace,
+    assert_mode,
+    fchmod_nofollow,
+    write_nofollow,
+)
 from vesper.schema import heal, read_json, repo_root, write_json_atomic
 
 _MARKERS = ("BEG" + "IN", "PRIV" + "ATE", "-" * 5)
@@ -303,7 +311,9 @@ def _key_check(root: Path, workspace: Path, identity_dir: Path, commands: list[_
         parts = line.split()
         if len(parts) == 2 and parts[1].isdigit():
             modes[Path(parts[0]).name] = parts[1]
-    key_name = "edcsa-p256.priv" if (identity_dir / "edcsa-p256.priv").exists() else "hmac.key"
+    key_name = (
+        ECDSA_KEY_FILENAME if (identity_dir / ECDSA_KEY_FILENAME).exists() else HMAC_KEY_FILENAME
+    )
     key_ok = modes.get(key_name) == "600"
     weak_refused = False
     with tempfile.TemporaryDirectory(prefix="vesper-mode-") as tmp:
@@ -595,7 +605,7 @@ def _scan(out_dir: Path) -> tuple[int, list[str]]:
             continue
         if not path.is_file():
             continue
-        if path.name in {"edcsa-p256.priv", "hmac.key"}:
+        if path.name in {ECDSA_KEY_FILENAME, HMAC_KEY_FILENAME}:
             hits.append(path.name)
         data = path.read_bytes()
         if any(marker.encode("ascii") in data for marker in _MARKERS):
