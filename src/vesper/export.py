@@ -20,7 +20,14 @@ from typing import Any
 
 from vesper.crypto import canonical_bytes, load_identity, refuse_insecure_key, sha256_hex
 from vesper.errors import IOPermissionError, ValidationError
-from vesper.fork import init_workspace, load_state, verify_fork_file, verify_head
+from vesper.fork import (
+    Verified,
+    VerifyResult,
+    init_workspace,
+    load_state,
+    verify_fork_file,
+    verify_head,
+)
 from vesper.memory import empty_memory, new_item, remember, sleep_state
 from vesper.paths import (
     ECDSA_KEY_FILENAME,
@@ -614,11 +621,10 @@ def _scan(out_dir: Path) -> tuple[int, list[str]]:
     return (1 if not hits else 0), hits
 
 
-def _fork_bytes(ws: Workspace, head: object) -> bytes | None:
-    document = getattr(head, "document", None)
-    if not getattr(head, "ok", False) or not isinstance(document, dict):
+def _fork_bytes(ws: Workspace, head: VerifyResult) -> bytes | None:
+    if not isinstance(head, Verified):
         return None
-    name = document.get("name")
+    name = head.document.get("name")
     if not isinstance(name, str):
         return None
     path = ws.sub("forks") / f"{name}.json"

@@ -18,10 +18,10 @@ import os
 import tempfile
 import time
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import Enum, StrEnum
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from vesper import crypto as crypto_mod
 from vesper.crypto import (
@@ -71,14 +71,45 @@ _REQUIRED = (
 )
 
 
-@dataclass
-class VerifyResult:
-    ok: bool
-    reason: str
-    waivers: list[dict[str, str]] = field(default_factory=list)
-    document: dict[str, Any] | None = None
-    content_hash: str = ""
+class Reject(StrEnum):
+    """Why a fork file or head did not verify. Values are the CLI error text."""
+
+    NAME = "name"
+    PARENT_MISSING = "parent_missing"
+    CANONICAL = "canonical"
+    BAD_SIGNATURE = "bad_signature"
+    SCHEMA_ID = "schema_id"
+    STATE_HASH = "state_hash"
+    KID = "kid"
+    PARENT_HASH = "parent_hash"
+    CYCLE = "cycle"
+    REPLAY = "replay"
+    NO_HEAD = "no_head"
+
+
+@dataclass(frozen=True)
+class Verified:
+    """A fork that verified. document and content_hash are always present."""
+
+    document: dict[str, Any]
+    content_hash: str
     signature_prefix: str = ""
+    waivers: list[dict[str, str]] = field(default_factory=list)
+    ok: ClassVar[bool] = True
+    reason: ClassVar[str] = "ok"
+
+
+@dataclass(frozen=True)
+class Rejected:
+    """A fork that did not verify. There is no document to misuse."""
+
+    reason: Reject
+    signature_prefix: str = ""
+    ok: ClassVar[bool] = False
+    waivers: ClassVar[tuple[dict[str, str], ...]] = ()
+
+
+VerifyResult = Verified | Rejected
 
 
 def initial_state(callsign: str, now: int, user_weight: float) -> dict[str, Any]:
@@ -282,7 +313,7 @@ def recover_pending(ws: Workspace) -> PendingFork | None:
             state = load_state(ws)
             result = verify_fork_file(target, identity=identity, allow_orphan=False)
             if (
-                result.ok
+                isinstance(result, Verified)
                 and _digest_eq(result.content_hash, pending["content_hash"])
                 and state.get("head") == pending.get("parent_id")
             ):
@@ -322,8 +353,8 @@ def _create_fork(ws: Workspace, name: str, *, dry_run: bool, now: int | None) ->
             raise ValidationError("head is not a name")
         parent_path = _fork_path(ws, parent_id)
         parent = verify_fork_file(parent_path, identity=identity, allow_orphan=False)
-        if not parent.ok or parent.document is None:
-            raise CryptoError(parent.reason or "parent_hash")
+        if isinstance(parent, Rejected):
+            raise CryptoError(parent.reason)
         parent_hash = parent.content_hash
         if stamp < int(parent.document["created_unix"]):
             raise ValidationError("fork clock is earlier than its parent")
@@ -369,57 +400,57 @@ def verify_fork_file(
     _seen: set[str] | None = None,
 ) -> VerifyResult:
     if ".." in Path(path).parts:
-        return VerifyResult(False, "name")
+        return Rejected(Reject.NAME)
     if path.is_symlink() or not path.is_file():
-        return VerifyResult(False, "parent_missing")
+        return Rejected(Reject.PARENT_MISSING)
     try:
         parsed = loads_strict(path.read_text(encoding="utf-8"))
     except (ValidationError, IOPermissionError, OSError):
-        return VerifyResult(False, "canonical")
+        return Rejected(Reject.CANONICAL)
     if not isinstance(parsed, dict):
-        return VerifyResult(False, "canonical")
+        return Rejected(Reject.CANONICAL)
     signature = parsed.get("signature")
     prefix = signature[:8] if isinstance(signature, str) else ""
     if not isinstance(signature, str) or not signature or len(signature) % 2:
-        return VerifyResult(False, "bad_signature", signature_prefix=prefix)
+        return Rejected(Reject.BAD_SIGNATURE, signature_prefix=prefix)
     body = {key: value for key, value in parsed.items() if key != "signature"}
     for key in _REQUIRED:
         if key not in body:
-            return VerifyResult(False, "canonical", signature_prefix=prefix)
+            return Rejected(Reject.CANONICAL, signature_prefix=prefix)
     if body.get("schema_id") != FORK_SCHEMA_ID:
-        return VerifyResult(False, "schema_id", signature_prefix=prefix)
+        return Rejected(Reject.SCHEMA_ID, signature_prefix=prefix)
     if body.get("schema_version") != FORK_SCHEMA_VERSION:
-        return VerifyResult(False, "schema_id", signature_prefix=prefix)
+        return Rejected(Reject.SCHEMA_ID, signature_prefix=prefix)
     try:
         name = validate_name(body.get("name"), what="fork name")
     except ValidationError:
-        return VerifyResult(False, "name", signature_prefix=prefix)
+        return Rejected(Reject.NAME, signature_prefix=prefix)
     if path.stem != name:
-        return VerifyResult(False, "name", signature_prefix=prefix)
+        return Rejected(Reject.NAME, signature_prefix=prefix)
     state = body.get("state")
     if not isinstance(state, dict) or not isinstance(state.get("memory"), dict):
-        return VerifyResult(False, "state_hash", signature_prefix=prefix)
+        return Rejected(Reject.STATE_HASH, signature_prefix=prefix)
     if not _digest_eq(body.get("state_hash"), sha256_hex(canonical_bytes(state))):
-        return VerifyResult(False, "state_hash", signature_prefix=prefix)
+        return Rejected(Reject.STATE_HASH, signature_prefix=prefix)
     if not _digest_eq(body.get("memory_root"), sha256_hex(canonical_bytes(state["memory"]))):
-        return VerifyResult(False, "state_hash", signature_prefix=prefix)
+        return Rejected(Reject.STATE_HASH, signature_prefix=prefix)
     created = body.get("created_unix")
     if isinstance(created, bool) or not isinstance(created, int):
-        return VerifyResult(False, "canonical", signature_prefix=prefix)
+        return Rejected(Reject.CANONICAL, signature_prefix=prefix)
     algo = body.get("algo")
     try:
         _verify_sig(algo, body, signature, identity)
     except CryptoError as exc:
-        reason = "kid" if str(exc) == "kid" else "bad_signature"
-        return VerifyResult(False, reason, signature_prefix=prefix)
+        reason = Reject.KID if str(exc) == "kid" else Reject.BAD_SIGNATURE
+        return Rejected(reason, signature_prefix=prefix)
     content_hash = sha256_hex(canonical_bytes(body))
     parent_id = body.get("parent_id")
     parent_hash = body.get("parent_hash")
     waivers: list[dict[str, str]] = []
     if parent_id is None and parent_hash is None:
-        chain_ok = True
+        pass  # a root fork has no chain to check
     elif isinstance(parent_id, str) and isinstance(parent_hash, str):
-        chain_ok, chain_reason, waivers = _check_parent(
+        chain = _check_parent(
             path=path,
             name=name,
             parent_id=parent_id,
@@ -430,11 +461,12 @@ def verify_fork_file(
             allow_orphan=allow_orphan,
             seen=_seen or set(),
         )
-        if not chain_ok:
-            return VerifyResult(False, chain_reason, signature_prefix=prefix)
+        if isinstance(chain, Reject):
+            return Rejected(chain, signature_prefix=prefix)
+        waivers = chain
     else:
-        return VerifyResult(False, "parent_hash", signature_prefix=prefix)
-    return VerifyResult(True, "ok", waivers, parsed, content_hash, prefix)
+        return Rejected(Reject.PARENT_HASH, signature_prefix=prefix)
+    return Verified(parsed, content_hash, prefix, waivers)
 
 
 def verify_head(root: Path, *, allow_orphan: bool = False) -> VerifyResult:
@@ -444,22 +476,22 @@ def verify_head(root: Path, *, allow_orphan: bool = False) -> VerifyResult:
     state = load_state(ws)
     head = state.get("head")
     if not isinstance(head, str):
-        return VerifyResult(False, "no_head")
+        return Rejected(Reject.NO_HEAD)
     try:
         validate_name(head, what="head")
     except ValidationError:
-        return VerifyResult(False, "name")
+        return Rejected(Reject.NAME)
     result = verify_fork_file(
         _fork_path(ws, head),
         identity=identity,
         allow_orphan=allow_orphan,
     )
-    if not result.ok or result.document is None:
+    if isinstance(result, Rejected):
         return result
     index = state.get("fork_index") or {}
     recorded = index.get(head) if isinstance(index, dict) else None
     if not _digest_eq(recorded, result.content_hash):
-        return VerifyResult(False, "replay", signature_prefix=result.signature_prefix)
+        return Rejected(Reject.REPLAY, signature_prefix=result.signature_prefix)
     head_ts = int(result.document["created_unix"])
     forks = ws.sub(FORKS_DIRNAME)
     for entry in sorted(forks.iterdir()):
@@ -468,20 +500,20 @@ def verify_head(root: Path, *, allow_orphan: bool = False) -> VerifyResult:
         try:
             validate_name(entry.stem, what="fork name")
         except ValidationError:
-            return VerifyResult(False, "name")
+            return Rejected(Reject.NAME)
         if entry.stem == head:
             continue
         try:
             other = verify_fork_file(entry, identity=identity, allow_orphan=allow_orphan)
         except (ValidationError, CryptoError, IOPermissionError, OSError):
-            return VerifyResult(False, "canonical", signature_prefix=result.signature_prefix)
-        if not other.ok or other.document is None:
+            return Rejected(Reject.CANONICAL, signature_prefix=result.signature_prefix)
+        if isinstance(other, Rejected):
             continue
         other_ts = other.document.get("created_unix")
         if isinstance(other_ts, bool) or not isinstance(other_ts, int):
             continue
         if other_ts > head_ts:
-            return VerifyResult(False, "replay", signature_prefix=result.signature_prefix)
+            return Rejected(Reject.REPLAY, signature_prefix=result.signature_prefix)
     return result
 
 
@@ -496,20 +528,21 @@ def _check_parent(
     identity: Identity | None,
     allow_orphan: bool,
     seen: set[str],
-) -> tuple[bool, str, list[dict[str, str]]]:
+) -> Reject | list[dict[str, str]]:
+    """The parent link's rejection, or the waivers it carries when it holds."""
     try:
         validate_name(parent_id, what="parent id")
     except ValidationError:
-        return False, "parent_hash", []
+        return Reject.PARENT_HASH
     if parent_id == name or parent_id in seen:
-        return False, "cycle", []
+        return Reject.CYCLE
     parent_path = path.parent / f"{parent_id}.json"
     if parent_path.is_symlink():
-        return False, "parent_hash", []
+        return Reject.PARENT_HASH
     if not parent_path.is_file():
         if not allow_orphan:
-            return False, "parent_missing", []
-        return True, "ok", [
+            return Reject.PARENT_MISSING
+        return [
             {
                 "id": "orphan-parent",
                 "reason": "parent file is missing and --allow-orphan was set",
@@ -518,16 +551,16 @@ def _check_parent(
     seen = set(seen)
     seen.add(name)
     parent = verify_fork_file(parent_path, identity=identity, allow_orphan=allow_orphan, _seen=seen)
-    if not parent.ok or parent.document is None:
-        return False, parent.reason, []
+    if isinstance(parent, Rejected):
+        return parent.reason
     if not _digest_eq(parent.content_hash, parent_hash):
-        return False, "parent_hash", []
+        return Reject.PARENT_HASH
     parent_created = parent.document.get("created_unix")
     if not isinstance(parent_created, int) or created < parent_created:
-        return False, "replay", []
+        return Reject.REPLAY
     if _digest_eq(parent.document.get("state_hash"), state_hash):
-        return False, "replay", []
-    return True, "ok", list(parent.waivers)
+        return Reject.REPLAY
+    return list(parent.waivers)
 
 
 def _verify_sig(algo: object, body: dict[str, Any], signature: str, identity: Identity | None) -> None:
