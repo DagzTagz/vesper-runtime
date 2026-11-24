@@ -17,12 +17,14 @@ from vesper.fork import (
     create_fork,
     init_workspace,
     load_state,
+    recover_pending,
     save_state,
     verify_fork_file,
     verify_head,
+    workspace_lock,
 )
 from vesper.memory import add_edge, new_item, remember, sleep_state
-from vesper.paths import Workspace
+from vesper.paths import PENDING_FORK_FILENAME, Workspace
 from vesper.schema import check_document, heal, read_json, write_json_atomic
 
 
@@ -141,6 +143,9 @@ def _dispatch(args: argparse.Namespace) -> None:
             print(f"initialized {root}")
         return
     if command == "export":
+        export_ws = Workspace(_workspace_path(args))
+        if export_ws.root.is_dir():
+            _recover(export_ws)
         out = Path(args.audit)
         if not out.is_absolute():
             out = Path.cwd() / out
@@ -155,6 +160,32 @@ def _dispatch(args: argparse.Namespace) -> None:
         return
     ws = Workspace(_workspace_path(args))
     ws.require_dir()
+    if command in {"remember", "link", "sleep"}:
+        # Read-modify-write of state.json: hold the workspace lock throughout.
+        with workspace_lock(ws):
+            _recover(ws, locked=True)
+            _mutate(args, ws)
+        return
+    if command == "memory":
+        if args.memory_cmd != "export":
+            raise UsageError("unknown memory command")
+        state = load_state(ws)
+        text = json.dumps(state["memory"], indent=2, sort_keys=True, allow_nan=False)
+        print(text)
+        return
+    if command == "fork":
+        target = create_fork(ws.root, args.name, dry_run=_flag(args, "dry_run"), now=args.now)
+        if target is not None:
+            print(target)
+        return
+    if command == "verify":
+        _verify(args, ws.root)
+        return
+    raise UsageError("unknown command")
+
+
+def _mutate(args: argparse.Namespace, ws: Workspace) -> None:
+    command = args.command
     if command == "remember":
         state = load_state(ws)
         item = new_item(
@@ -191,22 +222,20 @@ def _dispatch(args: argparse.Namespace) -> None:
         save_state(ws, state)
         print("slept")
         return
-    if command == "memory":
-        if args.memory_cmd != "export":
-            raise UsageError("unknown memory command")
-        state = load_state(ws)
-        text = json.dumps(state["memory"], indent=2, sort_keys=True, allow_nan=False)
-        print(text)
-        return
-    if command == "fork":
-        target = create_fork(ws.root, args.name, dry_run=_flag(args, "dry_run"), now=args.now)
-        if target is not None:
-            print(target)
-        return
-    if command == "verify":
-        _verify(args, ws.root)
-        return
     raise UsageError("unknown command")
+
+
+def _recover(ws: Workspace, *, locked: bool = False) -> None:
+    """Finish or roll back a fork that an earlier command left half done (F4)."""
+    if not ws.root.is_dir() or not ws.sub(PENDING_FORK_FILENAME).exists():
+        return
+    if locked:
+        outcome = recover_pending(ws)
+    else:
+        with workspace_lock(ws):
+            outcome = recover_pending(ws)
+    if outcome is not None:
+        print(f"vesper: interrupted fork {outcome.value}", file=sys.stderr)
 
 
 def _schema(args: argparse.Namespace) -> None:
@@ -236,6 +265,9 @@ def _schema(args: argparse.Namespace) -> None:
 
 def _verify(args: argparse.Namespace, root: Path) -> None:
     if args.head:
+        ws = Workspace(root)
+        ws.require_dir()
+        _recover(ws)
         result = verify_head(root, allow_orphan=args.allow_orphan)
     elif args.path:
         path = Path(args.path)

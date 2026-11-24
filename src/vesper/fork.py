@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import contextlib
 import copy
+import fcntl
 import hmac
 import json
 import os
@@ -18,6 +19,7 @@ import tempfile
 import time
 from dataclasses import dataclass, field
 from enum import Enum
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -39,6 +41,8 @@ from vesper.paths import (
     HMAC_KEY_FILENAME,
     IDENTITY_DIRNAME,
     INIT_MARKER_FILENAME,
+    LOCK_FILENAME,
+    PENDING_FORK_FILENAME,
     STATE_FILENAME,
     Workspace,
     assert_mode,
@@ -214,6 +218,80 @@ def save_state(ws: Workspace, state: dict[str, Any]) -> None:
     _write_regular(ws.sub(STATE_FILENAME), _pretty(state), 0o600)
 
 
+@contextlib.contextmanager
+def workspace_lock(ws: Workspace) -> Iterator[None]:
+    """Hold an exclusive flock on <workspace>/.lock. Released when the fd closes."""
+    path = ws.sub(LOCK_FILENAME)
+    flags = os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+    try:
+        fd = os.open(path, flags, 0o600)
+    except OSError as exc:
+        raise IOPermissionError("cannot open the workspace lock") from exc
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        os.close(fd)
+
+
+class PendingFork(Enum):
+    """Outcome of finishing an interrupted fork commit.
+
+    A fork commit is IDLE -> PENDING (journal written) -> WRITTEN (fork file
+    published) -> COMMITTED (state.json head/fork_index saved) -> IDLE
+    (journal removed). recover_pending() resolves a leftover journal:
+    WRITTEN with a fork file that verifies to the journalled hash is
+    committed; anything else is discarded.
+    """
+
+    COMMITTED = "committed"
+    DISCARDED = "discarded"
+
+
+def _commit_fork(ws: Workspace, state: dict[str, Any], name: str, content_hash: str) -> None:
+    disk = copy.deepcopy(state)
+    forks = list(disk.get("forks") or [])
+    if name not in forks:
+        forks.append(name)
+    disk["forks"] = forks
+    disk["head"] = name
+    index = dict(disk.get("fork_index") or {})
+    index[name] = content_hash
+    disk["fork_index"] = index
+    save_state(ws, disk)
+
+
+def recover_pending(ws: Workspace) -> PendingFork | None:
+    """Finish or roll back an interrupted fork. Call with workspace_lock held."""
+    journal = ws.sub(PENDING_FORK_FILENAME)
+    if not _present(journal):
+        return None
+    outcome = PendingFork.DISCARDED
+    try:
+        pending = loads_strict(journal.read_text(encoding="utf-8"))
+    except (ValidationError, IOPermissionError, OSError, UnicodeError):
+        pending = None
+    if isinstance(pending, dict) and isinstance(pending.get("content_hash"), str):
+        name = pending.get("name")
+        try:
+            target = _fork_path(ws, name) if isinstance(name, str) else None
+        except ValidationError:
+            target = None
+        if isinstance(name, str) and target is not None and target.is_file() and not target.is_symlink():
+            identity = load_identity(ws.sub(IDENTITY_DIRNAME))
+            state = load_state(ws)
+            result = verify_fork_file(target, identity=identity, allow_orphan=False)
+            if (
+                result.ok
+                and _digest_eq(result.content_hash, pending["content_hash"])
+                and state.get("head") == pending.get("parent_id")
+            ):
+                _commit_fork(ws, state, name, result.content_hash)
+                outcome = PendingFork.COMMITTED
+    os.unlink(journal)
+    return outcome
+
+
 def create_fork(
     root: Path,
     name: str,
@@ -224,6 +302,14 @@ def create_fork(
     name = validate_name(name, what="fork name")
     ws = Workspace(Path(root))
     ws.require_dir()
+    if dry_run:
+        return _create_fork(ws, name, dry_run=True, now=now)
+    with workspace_lock(ws):
+        recover_pending(ws)
+        return _create_fork(ws, name, dry_run=False, now=now)
+
+
+def _create_fork(ws: Workspace, name: str, *, dry_run: bool, now: int | None) -> Path | None:
     identity = load_identity(ws.sub(IDENTITY_DIRNAME))
     state = load_state(ws)
     stamp = int(time.time()) if now is None else now
@@ -265,13 +351,13 @@ def create_fork(
     signature = identity.sign_canonical(body)
     document = dict(body)
     document["signature"] = signature
-    _write_regular(target, _pretty(document), 0o600)
     content_hash = sha256_hex(canonical_bytes(body))
-    disk = copy.deepcopy(snapshot)
-    index = dict(disk.get("fork_index") or {})
-    index[name] = content_hash
-    disk["fork_index"] = index
-    save_state(ws, disk)
+    journal = ws.sub(PENDING_FORK_FILENAME)
+    pending = {"content_hash": content_hash, "name": name, "parent_id": body["parent_id"]}
+    _write_regular(journal, _pretty(pending), 0o600)  # IDLE -> PENDING
+    _write_regular(target, _pretty(document), 0o600)  # PENDING -> WRITTEN
+    _commit_fork(ws, state, name, content_hash)  # WRITTEN -> COMMITTED
+    os.unlink(journal)  # COMMITTED -> IDLE
     return target
 
 
