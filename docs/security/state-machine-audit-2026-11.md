@@ -5,6 +5,7 @@ This page is the vesper-runtime part of the full disclosure for the November 202
 - The complete report, with every finding and how each was reproduced, is in [Dagz-Scaffold/docs/audits/2026-11-state-machine-audit.md](https://github.com/DagzTagz/Dagz-Scaffold/blob/main/docs/audits/2026-11-state-machine-audit.md).
 - The same report holds the remediation status for all 13 findings across the four repositories.
 - The audited commit is [`5b775d7`](https://github.com/DagzTagz/vesper-runtime/tree/5b775d7115c5e81ebd7a98d12e1115be87e49c3b).
+- All fixes below merged on `main` on 2026-11-24 in [vesper-runtime#1](https://github.com/DagzTagz/vesper-runtime/pull/1) (merge commit [`e241040`](https://github.com/DagzTagz/vesper-runtime/commit/e24104020be997b48ed12db9fe1fecb52663ae90)).
 - [DB-002](../../disclosurebulletins.md#db-002--interrupted-fork-and-init-left-the-workspace-stuck) is the bulletin record for the two Med findings.
 
 None of these findings let anyone forge a fork, read a key, or bypass `verify`. The two Med findings could leave a workspace stuck after a crash or a failed write. The Low findings let invalid states be written down without any observed failure.
