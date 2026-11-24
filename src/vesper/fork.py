@@ -9,6 +9,7 @@ head name fails that check.
 
 from __future__ import annotations
 
+import contextlib
 import copy
 import hmac
 import json
@@ -464,10 +465,16 @@ def _write_regular(path: Path, data: bytes, mode: int) -> None:
         raise IOPermissionError("destination directory is missing")
     fd, tmp_name = tempfile.mkstemp(dir=parent, prefix=".vesper-", suffix=".tmp")
     try:
-        os.write(fd, data)
-        os.fchmod(fd, mode)
-        os.fsync(fd)
-    finally:
-        os.close(fd)
-    os.replace(tmp_name, path)
+        try:
+            os.write(fd, data)
+            os.fchmod(fd, mode)
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+        os.replace(tmp_name, path)
+    except BaseException:
+        # Do not leave a .vesper-*.tmp behind when the write or rename fails.
+        with contextlib.suppress(FileNotFoundError):
+            os.unlink(tmp_name)
+        raise
     assert_mode(path, mode, directory=False)
