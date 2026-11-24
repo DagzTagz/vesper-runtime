@@ -57,6 +57,25 @@ Status is one of these words:
 
 ## Bulletins
 
+### DB-002 — interrupted fork and init left the workspace stuck
+
+- **Id:** DB-002. November 2026 state-machine audit, findings F4 and F5.
+- **Status:** `fixed` on branch `fix/explicit-state-machines` by [`0fcca7c`](https://github.com/DagzTagz/vesper-runtime/commit/0fcca7c) (F4) and [`cbc2575`](https://github.com/DagzTagz/vesper-runtime/commit/cbc2575) (F5). The fix is closed once that branch merges.
+- **Published:** 2026-11-24.
+- **Updated:** 2026-11-24.
+- **Source:** [audit report](https://github.com/DagzTagz/Dagz-Scaffold/blob/main/docs/audits/2026-11-state-machine-audit.md) and [docs/security/state-machine-audit-2026-11.md](docs/security/state-machine-audit-2026-11.md).
+- **Component:** `src/vesper/fork.py` (`create_fork`, `init_workspace`, `load_state`) and `src/vesper/cli.py`.
+- **Versions:** 0.1.0 up to and including commit `5b775d7`.
+- **Patched versions:** the commits named in Status. No release has been cut yet.
+- **Where this program uses it:** `vesper fork` wrote the fork file and then `state.json`, with no lock and no record between the two writes. `vesper init` wrote the identity, `forks/` and `state.json` in sequence, with no marker.
+- **Plain account:** If a fork was interrupted between its two writes, the head stayed behind a newer signed fork, so `verify --head` said `replay` until the next fork. Two commands writing at once could drop one change. If `init` failed halfway, `init` refused to run again and the other commands failed on the half-built folder.
+- **What an attacker needs:** Nothing is exposed to an attacker. These are availability and integrity-of-history defects caused by a crash, a full disk, Ctrl-C or two commands running at once. No key leaves the workspace and no signature check is skipped.
+- **What is not affected:** Signatures, key files and `vesper verify` of a single fork file.
+- **Decision:** fix. A lock on `.lock`, a fork journal with recovery, and an init marker with `init --resume`.
+- **What we did not do:** We did not make `init --resume` delete a half-written `identity/`. A key file is never removed automatically.
+- **What would close it:** merging the commits above.
+- **Checked against:** `main` commit `5b775d7115c5e81ebd7a98d12e1115be87e49c3b` on 2026-11-24.
+
 ### DB-001 — python-ecdsa timing leak on P-256
 
 - **Id:** DB-001. Upstream GHSA-wj6h-64fc-37mp. CVE-2024-23342. GitHub Dependabot alert 1 on this repository.

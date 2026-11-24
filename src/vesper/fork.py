@@ -9,18 +9,24 @@ head name fails that check.
 
 from __future__ import annotations
 
+import contextlib
 import copy
+import fcntl
 import hmac
 import json
 import os
 import tempfile
 import time
 from dataclasses import dataclass, field
+from enum import Enum, StrEnum
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from vesper import crypto as crypto_mod
 from vesper.crypto import (
+    EcdsaIdentity,
+    HmacIdentity,
     Identity,
     canonical_bytes,
     generate_identity,
@@ -30,12 +36,15 @@ from vesper.crypto import (
     verify_signature,
 )
 from vesper.errors import CryptoError, IOPermissionError, ValidationError
-from vesper.memory import empty_memory, parse_user_weight
+from vesper.memory import check_tiers, empty_memory, parse_user_weight
 from vesper.paths import (
     ECDSA_KEY_FILENAME,
     FORKS_DIRNAME,
     HMAC_KEY_FILENAME,
     IDENTITY_DIRNAME,
+    INIT_MARKER_FILENAME,
+    LOCK_FILENAME,
+    PENDING_FORK_FILENAME,
     STATE_FILENAME,
     Workspace,
     assert_mode,
@@ -43,6 +52,7 @@ from vesper.paths import (
     prepare_workspace_dirs,
     slugify_callsign,
     validate_name,
+    write_nofollow,
 )
 from vesper.schema import loads_strict
 
@@ -63,14 +73,45 @@ _REQUIRED = (
 )
 
 
-@dataclass
-class VerifyResult:
-    ok: bool
-    reason: str
-    waivers: list[dict[str, str]] = field(default_factory=list)
-    document: dict[str, Any] | None = None
-    content_hash: str = ""
+class Reject(StrEnum):
+    """Why a fork file or head did not verify. Values are the CLI error text."""
+
+    NAME = "name"
+    PARENT_MISSING = "parent_missing"
+    CANONICAL = "canonical"
+    BAD_SIGNATURE = "bad_signature"
+    SCHEMA_ID = "schema_id"
+    STATE_HASH = "state_hash"
+    KID = "kid"
+    PARENT_HASH = "parent_hash"
+    CYCLE = "cycle"
+    REPLAY = "replay"
+    NO_HEAD = "no_head"
+
+
+@dataclass(frozen=True)
+class Verified:
+    """A fork that verified. document and content_hash are always present."""
+
+    document: dict[str, Any]
+    content_hash: str
     signature_prefix: str = ""
+    waivers: list[dict[str, str]] = field(default_factory=list)
+    ok: ClassVar[bool] = True
+    reason: ClassVar[str] = "ok"
+
+
+@dataclass(frozen=True)
+class Rejected:
+    """A fork that did not verify. There is no document to misuse."""
+
+    reason: Reject
+    signature_prefix: str = ""
+    ok: ClassVar[bool] = False
+    waivers: ClassVar[tuple[dict[str, str], ...]] = ()
+
+
+VerifyResult = Verified | Rejected
 
 
 def initial_state(callsign: str, now: int, user_weight: float) -> dict[str, Any]:
@@ -94,6 +135,45 @@ def initial_state(callsign: str, now: int, user_weight: float) -> dict[str, Any]
     }
 
 
+class WorkspaceState(Enum):
+    """What `init` finds in a workspace directory.
+
+    ABSENT   --init-->           READY
+    ABSENT   --init fails-->     PARTIAL  (marker left behind)
+    PARTIAL  --init --resume-->  READY
+    READY / FOREIGN: init refuses. FOREIGN is a state.json with no identity/,
+    which init never produces (it writes state.json last), so it is not ours.
+    """
+
+    ABSENT = "absent"
+    PARTIAL = "partial"
+    READY = "ready"
+    FOREIGN = "foreign"
+
+
+def _present(path: Path) -> bool:
+    return path.exists() or path.is_symlink()
+
+
+def classify_workspace(root: Path) -> WorkspaceState:
+    root = Path(root)
+    if _present(root / INIT_MARKER_FILENAME):
+        return WorkspaceState.PARTIAL
+    has_identity = _present(root / IDENTITY_DIRNAME)
+    has_forks = _present(root / FORKS_DIRNAME)
+    has_state = _present(root / STATE_FILENAME)
+    if not (has_identity or has_forks or has_state):
+        return WorkspaceState.ABSENT
+    if has_identity and has_forks and has_state:
+        return WorkspaceState.READY
+    if has_state and not has_identity:
+        return WorkspaceState.FOREIGN
+    return WorkspaceState.PARTIAL
+
+
+_RESUME_HINT = "workspace init is incomplete; run `vesper init --resume` to finish it"
+
+
 def init_workspace(
     root: Path,
     callsign: str,
@@ -101,6 +181,7 @@ def init_workspace(
     dry_run: bool = False,
     now: int | None = None,
     user_weight: float = 1.0,
+    resume: bool = False,
 ) -> None:
     user_weight = parse_user_weight(user_weight)
     slugify_callsign(callsign)
@@ -119,21 +200,43 @@ def init_workspace(
         print(f"dry-run: would create {Path(root) / FORKS_DIRNAME} mode 0700")
         return
     ws = prepare_workspace_dirs(Path(root))
-    identity = ws.sub(IDENTITY_DIRNAME)
-    if identity.exists() or identity.is_symlink():
+    found = classify_workspace(ws.root)
+    if found is WorkspaceState.READY:
         raise IOPermissionError("identity already exists")
-    generate_identity(identity)
+    if found is WorkspaceState.FOREIGN:
+        raise IOPermissionError("state.json exists without identity/; refusing to overwrite it")
+    if found is WorkspaceState.PARTIAL and not resume:
+        raise IOPermissionError(_RESUME_HINT)
+    # ABSENT, or PARTIAL with --resume. Each step is skipped when already done,
+    # so a failed init can be resumed. state.json is written last.
+    marker = ws.sub(INIT_MARKER_FILENAME)
+    if not _present(marker):
+        write_nofollow(marker, b"", 0o600)
+    identity = ws.sub(IDENTITY_DIRNAME)
+    if not _present(identity):
+        generate_identity(identity)
+    else:
+        try:
+            load_identity(identity)
+        except (CryptoError, IOPermissionError, ValidationError, OSError) as exc:
+            raise IOPermissionError(
+                "identity/ is incomplete; move it aside by hand, then run `vesper init --resume`"
+            ) from exc
     forks = ws.sub(FORKS_DIRNAME)
-    create_private_dir(forks)
-    _write_regular(
-        ws.sub(STATE_FILENAME),
-        _pretty(initial_state(callsign, stamp, user_weight)),
-        0o600,
-    )
+    if not _present(forks):
+        create_private_dir(forks)
+    else:
+        assert_mode(forks, 0o700, directory=True)
+    state_path = ws.sub(STATE_FILENAME)
+    if not _present(state_path):
+        _write_regular(state_path, _pretty(initial_state(callsign, stamp, user_weight)), 0o600)
+    os.unlink(marker)
 
 
 def load_state(ws: Workspace) -> dict[str, Any]:
     path = ws.sub(STATE_FILENAME)
+    if classify_workspace(ws.root) is WorkspaceState.PARTIAL:
+        raise IOPermissionError(_RESUME_HINT)
     if path.is_symlink() or not path.is_file():
         raise IOPermissionError("state file is missing")
     document = loads_strict(path.read_text(encoding="utf-8"))
@@ -141,11 +244,86 @@ def load_state(ws: Workspace) -> dict[str, Any]:
         raise ValidationError("state file is not an object")
     if not isinstance(document.get("memory"), dict):
         raise ValidationError("state memory is missing")
+    check_tiers(document["memory"])
     return document
 
 
 def save_state(ws: Workspace, state: dict[str, Any]) -> None:
     _write_regular(ws.sub(STATE_FILENAME), _pretty(state), 0o600)
+
+
+@contextlib.contextmanager
+def workspace_lock(ws: Workspace) -> Iterator[None]:
+    """Hold an exclusive flock on <workspace>/.lock. Released when the fd closes."""
+    path = ws.sub(LOCK_FILENAME)
+    flags = os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0)
+    try:
+        fd = os.open(path, flags, 0o600)
+    except OSError as exc:
+        raise IOPermissionError("cannot open the workspace lock") from exc
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        os.close(fd)
+
+
+class PendingFork(Enum):
+    """Outcome of finishing an interrupted fork commit.
+
+    A fork commit is IDLE -> PENDING (journal written) -> WRITTEN (fork file
+    published) -> COMMITTED (state.json head/fork_index saved) -> IDLE
+    (journal removed). recover_pending() resolves a leftover journal:
+    WRITTEN with a fork file that verifies to the journalled hash is
+    committed; anything else is discarded.
+    """
+
+    COMMITTED = "committed"
+    DISCARDED = "discarded"
+
+
+def _commit_fork(ws: Workspace, state: dict[str, Any], name: str, content_hash: str) -> None:
+    disk = copy.deepcopy(state)
+    forks = list(disk.get("forks") or [])
+    if name not in forks:
+        forks.append(name)
+    disk["forks"] = forks
+    disk["head"] = name
+    index = dict(disk.get("fork_index") or {})
+    index[name] = content_hash
+    disk["fork_index"] = index
+    save_state(ws, disk)
+
+
+def recover_pending(ws: Workspace) -> PendingFork | None:
+    """Finish or roll back an interrupted fork. Call with workspace_lock held."""
+    journal = ws.sub(PENDING_FORK_FILENAME)
+    if not _present(journal):
+        return None
+    outcome = PendingFork.DISCARDED
+    try:
+        pending = loads_strict(journal.read_text(encoding="utf-8"))
+    except (ValidationError, IOPermissionError, OSError, UnicodeError):
+        pending = None
+    if isinstance(pending, dict) and isinstance(pending.get("content_hash"), str):
+        name = pending.get("name")
+        try:
+            target = _fork_path(ws, name) if isinstance(name, str) else None
+        except ValidationError:
+            target = None
+        if isinstance(name, str) and target is not None and target.is_file() and not target.is_symlink():
+            identity = load_identity(ws.sub(IDENTITY_DIRNAME))
+            state = load_state(ws)
+            result = verify_fork_file(target, identity=identity, allow_orphan=False)
+            if (
+                isinstance(result, Verified)
+                and _digest_eq(result.content_hash, pending["content_hash"])
+                and state.get("head") == pending.get("parent_id")
+            ):
+                _commit_fork(ws, state, name, result.content_hash)
+                outcome = PendingFork.COMMITTED
+    os.unlink(journal)
+    return outcome
 
 
 def create_fork(
@@ -158,6 +336,14 @@ def create_fork(
     name = validate_name(name, what="fork name")
     ws = Workspace(Path(root))
     ws.require_dir()
+    if dry_run:
+        return _create_fork(ws, name, dry_run=True, now=now)
+    with workspace_lock(ws):
+        recover_pending(ws)
+        return _create_fork(ws, name, dry_run=False, now=now)
+
+
+def _create_fork(ws: Workspace, name: str, *, dry_run: bool, now: int | None) -> Path | None:
     identity = load_identity(ws.sub(IDENTITY_DIRNAME))
     state = load_state(ws)
     stamp = int(time.time()) if now is None else now
@@ -170,8 +356,8 @@ def create_fork(
             raise ValidationError("head is not a name")
         parent_path = _fork_path(ws, parent_id)
         parent = verify_fork_file(parent_path, identity=identity, allow_orphan=False)
-        if not parent.ok or parent.document is None:
-            raise CryptoError(parent.reason or "parent_hash")
+        if isinstance(parent, Rejected):
+            raise CryptoError(parent.reason)
         parent_hash = parent.content_hash
         if stamp < int(parent.document["created_unix"]):
             raise ValidationError("fork clock is earlier than its parent")
@@ -199,13 +385,13 @@ def create_fork(
     signature = identity.sign_canonical(body)
     document = dict(body)
     document["signature"] = signature
-    _write_regular(target, _pretty(document), 0o600)
     content_hash = sha256_hex(canonical_bytes(body))
-    disk = copy.deepcopy(snapshot)
-    index = dict(disk.get("fork_index") or {})
-    index[name] = content_hash
-    disk["fork_index"] = index
-    save_state(ws, disk)
+    journal = ws.sub(PENDING_FORK_FILENAME)
+    pending = {"content_hash": content_hash, "name": name, "parent_id": body["parent_id"]}
+    _write_regular(journal, _pretty(pending), 0o600)  # IDLE -> PENDING
+    _write_regular(target, _pretty(document), 0o600)  # PENDING -> WRITTEN
+    _commit_fork(ws, state, name, content_hash)  # WRITTEN -> COMMITTED
+    os.unlink(journal)  # COMMITTED -> IDLE
     return target
 
 
@@ -217,57 +403,57 @@ def verify_fork_file(
     _seen: set[str] | None = None,
 ) -> VerifyResult:
     if ".." in Path(path).parts:
-        return VerifyResult(False, "name")
+        return Rejected(Reject.NAME)
     if path.is_symlink() or not path.is_file():
-        return VerifyResult(False, "parent_missing")
+        return Rejected(Reject.PARENT_MISSING)
     try:
         parsed = loads_strict(path.read_text(encoding="utf-8"))
     except (ValidationError, IOPermissionError, OSError):
-        return VerifyResult(False, "canonical")
+        return Rejected(Reject.CANONICAL)
     if not isinstance(parsed, dict):
-        return VerifyResult(False, "canonical")
+        return Rejected(Reject.CANONICAL)
     signature = parsed.get("signature")
     prefix = signature[:8] if isinstance(signature, str) else ""
     if not isinstance(signature, str) or not signature or len(signature) % 2:
-        return VerifyResult(False, "bad_signature", signature_prefix=prefix)
+        return Rejected(Reject.BAD_SIGNATURE, signature_prefix=prefix)
     body = {key: value for key, value in parsed.items() if key != "signature"}
     for key in _REQUIRED:
         if key not in body:
-            return VerifyResult(False, "canonical", signature_prefix=prefix)
+            return Rejected(Reject.CANONICAL, signature_prefix=prefix)
     if body.get("schema_id") != FORK_SCHEMA_ID:
-        return VerifyResult(False, "schema_id", signature_prefix=prefix)
+        return Rejected(Reject.SCHEMA_ID, signature_prefix=prefix)
     if body.get("schema_version") != FORK_SCHEMA_VERSION:
-        return VerifyResult(False, "schema_id", signature_prefix=prefix)
+        return Rejected(Reject.SCHEMA_ID, signature_prefix=prefix)
     try:
         name = validate_name(body.get("name"), what="fork name")
     except ValidationError:
-        return VerifyResult(False, "name", signature_prefix=prefix)
+        return Rejected(Reject.NAME, signature_prefix=prefix)
     if path.stem != name:
-        return VerifyResult(False, "name", signature_prefix=prefix)
+        return Rejected(Reject.NAME, signature_prefix=prefix)
     state = body.get("state")
     if not isinstance(state, dict) or not isinstance(state.get("memory"), dict):
-        return VerifyResult(False, "state_hash", signature_prefix=prefix)
+        return Rejected(Reject.STATE_HASH, signature_prefix=prefix)
     if not _digest_eq(body.get("state_hash"), sha256_hex(canonical_bytes(state))):
-        return VerifyResult(False, "state_hash", signature_prefix=prefix)
+        return Rejected(Reject.STATE_HASH, signature_prefix=prefix)
     if not _digest_eq(body.get("memory_root"), sha256_hex(canonical_bytes(state["memory"]))):
-        return VerifyResult(False, "state_hash", signature_prefix=prefix)
+        return Rejected(Reject.STATE_HASH, signature_prefix=prefix)
     created = body.get("created_unix")
     if isinstance(created, bool) or not isinstance(created, int):
-        return VerifyResult(False, "canonical", signature_prefix=prefix)
+        return Rejected(Reject.CANONICAL, signature_prefix=prefix)
     algo = body.get("algo")
     try:
         _verify_sig(algo, body, signature, identity)
     except CryptoError as exc:
-        reason = "kid" if str(exc) == "kid" else "bad_signature"
-        return VerifyResult(False, reason, signature_prefix=prefix)
+        reason = Reject.KID if str(exc) == "kid" else Reject.BAD_SIGNATURE
+        return Rejected(reason, signature_prefix=prefix)
     content_hash = sha256_hex(canonical_bytes(body))
     parent_id = body.get("parent_id")
     parent_hash = body.get("parent_hash")
     waivers: list[dict[str, str]] = []
     if parent_id is None and parent_hash is None:
-        chain_ok = True
+        pass  # a root fork has no chain to check
     elif isinstance(parent_id, str) and isinstance(parent_hash, str):
-        chain_ok, chain_reason, waivers = _check_parent(
+        chain = _check_parent(
             path=path,
             name=name,
             parent_id=parent_id,
@@ -278,11 +464,12 @@ def verify_fork_file(
             allow_orphan=allow_orphan,
             seen=_seen or set(),
         )
-        if not chain_ok:
-            return VerifyResult(False, chain_reason, signature_prefix=prefix)
+        if isinstance(chain, Reject):
+            return Rejected(chain, signature_prefix=prefix)
+        waivers = chain
     else:
-        return VerifyResult(False, "parent_hash", signature_prefix=prefix)
-    return VerifyResult(True, "ok", waivers, parsed, content_hash, prefix)
+        return Rejected(Reject.PARENT_HASH, signature_prefix=prefix)
+    return Verified(parsed, content_hash, prefix, waivers)
 
 
 def verify_head(root: Path, *, allow_orphan: bool = False) -> VerifyResult:
@@ -292,22 +479,22 @@ def verify_head(root: Path, *, allow_orphan: bool = False) -> VerifyResult:
     state = load_state(ws)
     head = state.get("head")
     if not isinstance(head, str):
-        return VerifyResult(False, "no_head")
+        return Rejected(Reject.NO_HEAD)
     try:
         validate_name(head, what="head")
     except ValidationError:
-        return VerifyResult(False, "name")
+        return Rejected(Reject.NAME)
     result = verify_fork_file(
         _fork_path(ws, head),
         identity=identity,
         allow_orphan=allow_orphan,
     )
-    if not result.ok or result.document is None:
+    if isinstance(result, Rejected):
         return result
     index = state.get("fork_index") or {}
     recorded = index.get(head) if isinstance(index, dict) else None
     if not _digest_eq(recorded, result.content_hash):
-        return VerifyResult(False, "replay", signature_prefix=result.signature_prefix)
+        return Rejected(Reject.REPLAY, signature_prefix=result.signature_prefix)
     head_ts = int(result.document["created_unix"])
     forks = ws.sub(FORKS_DIRNAME)
     for entry in sorted(forks.iterdir()):
@@ -316,20 +503,20 @@ def verify_head(root: Path, *, allow_orphan: bool = False) -> VerifyResult:
         try:
             validate_name(entry.stem, what="fork name")
         except ValidationError:
-            return VerifyResult(False, "name")
+            return Rejected(Reject.NAME)
         if entry.stem == head:
             continue
         try:
             other = verify_fork_file(entry, identity=identity, allow_orphan=allow_orphan)
         except (ValidationError, CryptoError, IOPermissionError, OSError):
-            return VerifyResult(False, "canonical", signature_prefix=result.signature_prefix)
-        if not other.ok or other.document is None:
+            return Rejected(Reject.CANONICAL, signature_prefix=result.signature_prefix)
+        if isinstance(other, Rejected):
             continue
         other_ts = other.document.get("created_unix")
         if isinstance(other_ts, bool) or not isinstance(other_ts, int):
             continue
         if other_ts > head_ts:
-            return VerifyResult(False, "replay", signature_prefix=result.signature_prefix)
+            return Rejected(Reject.REPLAY, signature_prefix=result.signature_prefix)
     return result
 
 
@@ -344,20 +531,21 @@ def _check_parent(
     identity: Identity | None,
     allow_orphan: bool,
     seen: set[str],
-) -> tuple[bool, str, list[dict[str, str]]]:
+) -> Reject | list[dict[str, str]]:
+    """The parent link's rejection, or the waivers it carries when it holds."""
     try:
         validate_name(parent_id, what="parent id")
     except ValidationError:
-        return False, "parent_hash", []
+        return Reject.PARENT_HASH
     if parent_id == name or parent_id in seen:
-        return False, "cycle", []
+        return Reject.CYCLE
     parent_path = path.parent / f"{parent_id}.json"
     if parent_path.is_symlink():
-        return False, "parent_hash", []
+        return Reject.PARENT_HASH
     if not parent_path.is_file():
         if not allow_orphan:
-            return False, "parent_missing", []
-        return True, "ok", [
+            return Reject.PARENT_MISSING
+        return [
             {
                 "id": "orphan-parent",
                 "reason": "parent file is missing and --allow-orphan was set",
@@ -366,16 +554,16 @@ def _check_parent(
     seen = set(seen)
     seen.add(name)
     parent = verify_fork_file(parent_path, identity=identity, allow_orphan=allow_orphan, _seen=seen)
-    if not parent.ok or parent.document is None:
-        return False, parent.reason, []
+    if isinstance(parent, Rejected):
+        return parent.reason
     if not _digest_eq(parent.content_hash, parent_hash):
-        return False, "parent_hash", []
+        return Reject.PARENT_HASH
     parent_created = parent.document.get("created_unix")
     if not isinstance(parent_created, int) or created < parent_created:
-        return False, "replay", []
+        return Reject.REPLAY
     if _digest_eq(parent.document.get("state_hash"), state_hash):
-        return False, "replay", []
-    return True, "ok", list(parent.waivers)
+        return Reject.REPLAY
+    return list(parent.waivers)
 
 
 def _verify_sig(algo: object, body: dict[str, Any], signature: str, identity: Identity | None) -> None:
@@ -394,7 +582,7 @@ def _verify_sig(algo: object, body: dict[str, Any], signature: str, identity: Id
         )
         return
     if algo == "hmac-sha256":
-        if identity is None or identity.algo != "hmac-sha256":
+        if not isinstance(identity, HmacIdentity):
             raise CryptoError("bad_signature")
         if not isinstance(body.get("kid"), str) or not _digest_eq(identity.kid, body["kid"]):
             raise CryptoError("kid")
@@ -425,7 +613,7 @@ def _body(
         "state": state,
         "state_hash": sha256_hex(canonical_bytes(state)),
     }
-    if identity.algo == "ecdsa-p256":
+    if isinstance(identity, EcdsaIdentity):
         body["public_key_hex"] = identity.public_key_hex
     else:
         body["hmac_kid"] = identity.kid
@@ -464,10 +652,16 @@ def _write_regular(path: Path, data: bytes, mode: int) -> None:
         raise IOPermissionError("destination directory is missing")
     fd, tmp_name = tempfile.mkstemp(dir=parent, prefix=".vesper-", suffix=".tmp")
     try:
-        os.write(fd, data)
-        os.fchmod(fd, mode)
-        os.fsync(fd)
-    finally:
-        os.close(fd)
-    os.replace(tmp_name, path)
+        try:
+            os.write(fd, data)
+            os.fchmod(fd, mode)
+            os.fsync(fd)
+        finally:
+            os.close(fd)
+        os.replace(tmp_name, path)
+    except BaseException:
+        # Do not leave a .vesper-*.tmp behind when the write or rename fails.
+        with contextlib.suppress(FileNotFoundError):
+            os.unlink(tmp_name)
+        raise
     assert_mode(path, mode, directory=False)

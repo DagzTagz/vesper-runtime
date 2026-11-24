@@ -34,7 +34,7 @@ The notes live in four lists inside `state.json`. `vesper remember` adds a note.
 
 ## A note and an edge
 
-A note is one object with `id`, `ts`, `text`, `valence`, `weight`, `tier`, and `pinned`. `tier` is `stm`, `semantic`, or `ltm`, and it must match the list that holds the note. Sleep writes `last_decay_unix` onto a semantic note when it actually decays that note.
+A note is one object with `id`, `ts`, `text`, `valence`, `weight`, `tier`, and `pinned`. `tier` is `stm`, `semantic`, or `ltm`, and it must match the list that holds the note. Every command that loads `state.json` checks this and exits `2` with `memory item tier does not match its list` if a note disagrees. A note with no `tier` field takes the tray it sits in. Sleep writes `last_decay_unix` onto a semantic note when it actually decays that note.
 
 If you omit `--id`, the id is `m-` plus the first 16 hex characters of SHA-256 over `tier|now|text|count`, where `count` is how many notes are already in that tray. An id is one segment of `[A-Za-z0-9._-]`, length 1 to 128, with no `..`. The same id cannot already exist on any note or any edge.
 
@@ -83,3 +83,7 @@ vesper --workspace ./workspace memory export
 What good looks like: `remember` prints an id, `link` prints `linked`, `sleep` prints `slept`, and `memory export` prints JSON with `stm`, `semantic`, `graph`, and `ltm`. In this sample the note stays in `stm`, because `1.0 * 0.2 * 1.0` is `0.2`, which is below `0.45`. The edge stays, because its weight `0.2` is not below `0.05`. Nothing fades, because the semantic list is empty.
 
 What failure means: exit `2` when a number, a name, or a text length is rejected. Exit `3` when the workspace does not exist. `--pin` on `remember` or `link` is the flag that sets `pinned` to true. There is no separate pin command. `--dry-run` does not skip these writes.
+
+## Writers outside this program
+
+[vesper-bind](https://github.com/DagzTagz/vesper-bind) can append one STM note to a workspace. It does not import this package, so it mirrors this contract: the note goes in `stm` with `tier` `stm`; the id is `m-` plus the first 16 hex characters of SHA-256 over `stm|now|text|count`; when `stm` would exceed 100 notes, the oldest `(ts, id)` is dropped. A writer outside this program should hold an exclusive `flock` on `<workspace>/.lock` while it reads and rewrites `state.json`, the same lock `remember`, `link`, `sleep`, and `fork` hold.

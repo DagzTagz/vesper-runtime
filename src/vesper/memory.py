@@ -119,6 +119,28 @@ def _ids(state: dict[str, Any]) -> set[str]:
     return found
 
 
+ITEM_TIERS = ("stm", "semantic", "ltm")
+
+
+def check_tiers(memory: dict[str, Any]) -> None:
+    """List membership is an item's tier; a stored item["tier"] must agree.
+
+    schema heal fills a missing tier from its list. A tier that disagrees
+    with its list is refused on every load, not only by schema check/heal.
+    """
+    for tier in ITEM_TIERS:
+        items = memory.get(tier)
+        if items is None:
+            continue
+        if not isinstance(items, list):
+            raise ValidationError(f"memory.{tier} has the wrong type")
+        for item in items:
+            if not isinstance(item, dict):
+                raise ValidationError("memory item has the wrong type")
+            if item.get("tier", tier) != tier:
+                raise ValidationError("memory item tier does not match its list")
+
+
 def remember(state: dict[str, Any], item: dict[str, Any]) -> dict[str, Any]:
     """Append a text item. STM drops the oldest item past the cap of 100."""
     if item["id"] in _ids(state):

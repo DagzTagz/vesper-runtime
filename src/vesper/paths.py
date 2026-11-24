@@ -24,6 +24,12 @@ PUBLIC_FILENAME = "public.json"
 # On-disk private key name from the v0.1 layout contract.
 ECDSA_KEY_FILENAME = "edcsa-p256.priv"
 HMAC_KEY_FILENAME = "hmac.key"
+# Written first by `init` and removed last. Its presence means init did not finish.
+INIT_MARKER_FILENAME = ".init-in-progress"
+# Exclusive flock(2) held by every command that writes state.json or a fork.
+LOCK_FILENAME = ".lock"
+# Fork journal: written before the fork file, removed after state.json commits.
+PENDING_FORK_FILENAME = ".fork-pending.json"
 
 
 def validate_name(name: object, *, what: str = "name") -> str:

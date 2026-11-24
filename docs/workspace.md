@@ -39,6 +39,9 @@ These modes are checked exactly. A directory at `2700`, or a key at `0640`, is r
 | `state.json` | `0600` | Only you. `remember`, `sleep`, and `fork` write it back at `0600`. |
 | `forks/` | `0700` | Only you. |
 | `forks/*.json` | `0600` | Only you. |
+| `.lock` | `0600` | Only you. Empty. `fork`, `remember`, `link`, and `sleep` hold an exclusive `flock` on it while they change `state.json` or `forks/`, so two commands cannot interleave. |
+| `.fork-pending.json` | `0600` | Only you. Present only while a fork is being written, or after one was interrupted. The next `fork`, `remember`, `link`, `sleep`, `verify --head`, or `export` finishes that fork if its file verifies, and otherwise discards the journal. |
+| `.init-in-progress` | `0600` | Only you. Present only while `init` runs, or after it stopped part way. Run `vesper init --resume` to finish. |
 | the folder you pass to `export --audit` | `0700` | Only you. This folder is not inside the workspace unless you put it there. |
 | each file in that export folder | `0600` | Only you. |
 
