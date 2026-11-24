@@ -16,6 +16,14 @@ The roles this tool does not fill are in [getting-started.md](getting-started.md
 
 ### Fixed
 
+- State-machine audit, November 2026. Details are in [docs/security/state-machine-audit-2026-11.md](docs/security/state-machine-audit-2026-11.md) and DB-002.
+  - **F4:** `fork`, `remember`, `link` and `sleep` hold an exclusive `flock` on `<workspace>/.lock`. `fork` journals the commit in `.fork-pending.json`, and the next command finishes or discards an interrupted fork.
+  - **F5:** `init` writes `.init-in-progress` and classifies the workspace. A half-built workspace can be finished with `vesper init --resume`. `init` refuses a `state.json` that has no `identity/`.
+  - **F7:** `VerifyResult` is `Verified | Rejected`, and the reasons are the `Reject` StrEnum. Output and exit codes are unchanged.
+  - **F11:** loading state refuses an item whose `tier` disagrees with its list. Run `vesper schema heal --write` to fix one.
+  - **F12:** `Identity` is `EcdsaIdentity | HmacIdentity`.
+  - A failed atomic write removes its temp file. `export` uses the key filename constants from `vesper.paths`.
+
 - `schema heal --write` keeps an existing mode that is a non-zero subset of `0644`. A `0600` notes file stays `0600`. A new file, or a wider mode, is written as `0644`.
 - `vesper init` sets the workspace directory you named to mode `0700`, including a directory that already existed. Parent directories are left alone. A symlinked workspace root is refused.
 - If an audit scan finds PEM-shaped text, `fork_verified.json` is rewritten as JSON `null`, the scan line does not repeat the marker, and `pass` stays false.
