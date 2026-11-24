@@ -34,7 +34,7 @@ from vesper.crypto import (
     verify_signature,
 )
 from vesper.errors import CryptoError, IOPermissionError, ValidationError
-from vesper.memory import empty_memory, parse_user_weight
+from vesper.memory import check_tiers, empty_memory, parse_user_weight
 from vesper.paths import (
     ECDSA_KEY_FILENAME,
     FORKS_DIRNAME,
@@ -242,6 +242,7 @@ def load_state(ws: Workspace) -> dict[str, Any]:
         raise ValidationError("state file is not an object")
     if not isinstance(document.get("memory"), dict):
         raise ValidationError("state memory is missing")
+    check_tiers(document["memory"])
     return document
 
 
