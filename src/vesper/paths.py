@@ -24,6 +24,8 @@ PUBLIC_FILENAME = "public.json"
 # On-disk private key name from the v0.1 layout contract.
 ECDSA_KEY_FILENAME = "edcsa-p256.priv"
 HMAC_KEY_FILENAME = "hmac.key"
+# Written first by `init` and removed last. Its presence means init did not finish.
+INIT_MARKER_FILENAME = ".init-in-progress"
 
 
 def validate_name(name: object, *, what: str = "name") -> str:

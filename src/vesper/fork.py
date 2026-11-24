@@ -17,6 +17,7 @@ import os
 import tempfile
 import time
 from dataclasses import dataclass, field
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
@@ -37,6 +38,7 @@ from vesper.paths import (
     FORKS_DIRNAME,
     HMAC_KEY_FILENAME,
     IDENTITY_DIRNAME,
+    INIT_MARKER_FILENAME,
     STATE_FILENAME,
     Workspace,
     assert_mode,
@@ -44,6 +46,7 @@ from vesper.paths import (
     prepare_workspace_dirs,
     slugify_callsign,
     validate_name,
+    write_nofollow,
 )
 from vesper.schema import loads_strict
 
@@ -95,6 +98,45 @@ def initial_state(callsign: str, now: int, user_weight: float) -> dict[str, Any]
     }
 
 
+class WorkspaceState(Enum):
+    """What `init` finds in a workspace directory.
+
+    ABSENT   --init-->           READY
+    ABSENT   --init fails-->     PARTIAL  (marker left behind)
+    PARTIAL  --init --resume-->  READY
+    READY / FOREIGN: init refuses. FOREIGN is a state.json with no identity/,
+    which init never produces (it writes state.json last), so it is not ours.
+    """
+
+    ABSENT = "absent"
+    PARTIAL = "partial"
+    READY = "ready"
+    FOREIGN = "foreign"
+
+
+def _present(path: Path) -> bool:
+    return path.exists() or path.is_symlink()
+
+
+def classify_workspace(root: Path) -> WorkspaceState:
+    root = Path(root)
+    if _present(root / INIT_MARKER_FILENAME):
+        return WorkspaceState.PARTIAL
+    has_identity = _present(root / IDENTITY_DIRNAME)
+    has_forks = _present(root / FORKS_DIRNAME)
+    has_state = _present(root / STATE_FILENAME)
+    if not (has_identity or has_forks or has_state):
+        return WorkspaceState.ABSENT
+    if has_identity and has_forks and has_state:
+        return WorkspaceState.READY
+    if has_state and not has_identity:
+        return WorkspaceState.FOREIGN
+    return WorkspaceState.PARTIAL
+
+
+_RESUME_HINT = "workspace init is incomplete; run `vesper init --resume` to finish it"
+
+
 def init_workspace(
     root: Path,
     callsign: str,
@@ -102,6 +144,7 @@ def init_workspace(
     dry_run: bool = False,
     now: int | None = None,
     user_weight: float = 1.0,
+    resume: bool = False,
 ) -> None:
     user_weight = parse_user_weight(user_weight)
     slugify_callsign(callsign)
@@ -120,21 +163,43 @@ def init_workspace(
         print(f"dry-run: would create {Path(root) / FORKS_DIRNAME} mode 0700")
         return
     ws = prepare_workspace_dirs(Path(root))
-    identity = ws.sub(IDENTITY_DIRNAME)
-    if identity.exists() or identity.is_symlink():
+    found = classify_workspace(ws.root)
+    if found is WorkspaceState.READY:
         raise IOPermissionError("identity already exists")
-    generate_identity(identity)
+    if found is WorkspaceState.FOREIGN:
+        raise IOPermissionError("state.json exists without identity/; refusing to overwrite it")
+    if found is WorkspaceState.PARTIAL and not resume:
+        raise IOPermissionError(_RESUME_HINT)
+    # ABSENT, or PARTIAL with --resume. Each step is skipped when already done,
+    # so a failed init can be resumed. state.json is written last.
+    marker = ws.sub(INIT_MARKER_FILENAME)
+    if not _present(marker):
+        write_nofollow(marker, b"", 0o600)
+    identity = ws.sub(IDENTITY_DIRNAME)
+    if not _present(identity):
+        generate_identity(identity)
+    else:
+        try:
+            load_identity(identity)
+        except (CryptoError, IOPermissionError, ValidationError, OSError) as exc:
+            raise IOPermissionError(
+                "identity/ is incomplete; move it aside by hand, then run `vesper init --resume`"
+            ) from exc
     forks = ws.sub(FORKS_DIRNAME)
-    create_private_dir(forks)
-    _write_regular(
-        ws.sub(STATE_FILENAME),
-        _pretty(initial_state(callsign, stamp, user_weight)),
-        0o600,
-    )
+    if not _present(forks):
+        create_private_dir(forks)
+    else:
+        assert_mode(forks, 0o700, directory=True)
+    state_path = ws.sub(STATE_FILENAME)
+    if not _present(state_path):
+        _write_regular(state_path, _pretty(initial_state(callsign, stamp, user_weight)), 0o600)
+    os.unlink(marker)
 
 
 def load_state(ws: Workspace) -> dict[str, Any]:
     path = ws.sub(STATE_FILENAME)
+    if classify_workspace(ws.root) is WorkspaceState.PARTIAL:
+        raise IOPermissionError(_RESUME_HINT)
     if path.is_symlink() or not path.is_file():
         raise IOPermissionError("state file is missing")
     document = loads_strict(path.read_text(encoding="utf-8"))

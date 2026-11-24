@@ -53,6 +53,11 @@ def build_parser() -> Parser:
     init.add_argument("--callsign", required=True)
     init.add_argument("--user-weight", default="1.0")
     init.add_argument("--dry-run", action="store_true", dest="command_dry_run")
+    init.add_argument(
+        "--resume",
+        action="store_true",
+        help="finish an init that failed part way; keeps the existing key",
+    )
 
     remember = sub.add_parser("remember", help="append a memory item")
     remember.add_argument("--text", required=True)
@@ -125,7 +130,13 @@ def _dispatch(args: argparse.Namespace) -> None:
     if command == "init":
         root = _init_root(args)
         weight = _number(args.user_weight, "user-weight")
-        init_workspace(root, args.callsign, dry_run=_flag(args, "dry_run"), user_weight=weight)
+        init_workspace(
+            root,
+            args.callsign,
+            dry_run=_flag(args, "dry_run"),
+            user_weight=weight,
+            resume=args.resume,
+        )
         if not _flag(args, "dry_run"):
             print(f"initialized {root}")
         return
