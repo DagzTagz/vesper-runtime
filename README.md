@@ -21,7 +21,7 @@ workspace/                         # the folder that holds your notes and your k
 └── forks/                         # empty until you write a signed snapshot
 ```
 
-If Python cannot import the `ecdsa` package, the private file is `identity/hmac.key` instead. The program refuses to keep both secret files.
+If Python cannot import the `ecdsa` package, `vesper init` stops with an error that tells you to install it, and writes nothing. It used to fall back to a shared-secret key, `identity/hmac.key`, without asking. That key lets anyone who can verify a snapshot also forge one, so it now needs the loudly named opt-in `VESPER_INSECURE_ALLOW_HMAC_FALLBACK=1`, and each use prints a warning. An existing `hmac.key` workspace still verifies its snapshots, but refuses to sign new ones without that opt-in. How to move off it is in [docs/forks.md](docs/forks.md#moving-off-an-hmac-key). The program refuses to keep both secret files.
 
 ## Words we have to use
 

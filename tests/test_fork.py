@@ -124,6 +124,7 @@ def test_hmac_fallback_roundtrip(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     import vesper.crypto as crypto
 
     monkeypatch.setattr(crypto, "ecdsa_available", lambda: False)
+    monkeypatch.setenv(crypto.INSECURE_HMAC_ENV, "1")
     root = tmp_path / "ws"
     init_workspace(root, "hmac-user", now=5)
     assert (root / "identity" / "hmac.key").is_file()
@@ -149,6 +150,7 @@ def test_hmac_dry_run_names_hmac_key(tmp_path: Path, monkeypatch: pytest.MonkeyP
     import vesper.crypto as crypto
 
     monkeypatch.setattr(crypto, "ecdsa_available", lambda: False)
+    monkeypatch.setenv(crypto.INSECURE_HMAC_ENV, "1")
     root = tmp_path / "ws"
     assert run(["--dry-run", "init", "--workspace", str(root), "--callsign", "hmac-user"]) == 0
     text = capsys.readouterr().out

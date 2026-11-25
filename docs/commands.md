@@ -85,6 +85,6 @@ What failure means: a value that is not a whole number is exit `1`. On `fork`, a
 vesper init --workspace ./workspace --callsign nova --dry-run
 ```
 
-What good looks like: the private-file line names `identity/edcsa-p256.priv` when the `ecdsa` package imported. It names `identity/hmac.key` when that package did not import. `./workspace` still does not exist. The spelling `edcsa` is the v0.1 filename. Do not rename it.
+What good looks like: the private-file line names `identity/edcsa-p256.priv` when the `ecdsa` package imported. If that package did not import, init exits `2` with a message to install `ecdsa`, unless `VESPER_INSECURE_ALLOW_HMAC_FALLBACK=1` is set; with it, the line names `identity/hmac.key`. `./workspace` still does not exist. The spelling `edcsa` is the v0.1 filename. Do not rename it.
 
-What failure means: exit `1` if `--workspace` or `--callsign` is missing. Exit `2` if the callsign is rejected or `--user-weight` is outside its range. If you expected the `edcsa-p256.priv` line and saw `hmac.key`, the `ecdsa` package did not import. Reinstall with `pip install -e ".[dev]"` if you expected the normal signature.
+What failure means: exit `1` if `--workspace` or `--callsign` is missing. Exit `2` if the callsign is rejected or `--user-weight` is outside its range. Exit `2` with `the \`ecdsa\` package is not installed` means the `ecdsa` package did not import. Reinstall with `pip install -e ".[dev]"` if you expected the normal signature.

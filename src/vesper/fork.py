@@ -191,6 +191,11 @@ def init_workspace(
     if any(part == ".." for part in Path(root).parts):
         raise ValidationError("workspace path rejects '..'")
     identity_dir = Path(root) / IDENTITY_DIRNAME
+    # Refuse before printing or writing anything when only HMAC is possible
+    # and the operator did not opt in. A resumed init with an existing key
+    # is checked when that key is loaded and used.
+    if not resume or not _present(identity_dir):
+        crypto_mod.require_signing_backend()
     if dry_run:
         key_name = HMAC_KEY_FILENAME if not crypto_mod.ecdsa_available() else ECDSA_KEY_FILENAME
         print(f"dry-run: would create {identity_dir} mode 0700")
@@ -377,6 +382,7 @@ def _create_fork(ws: Workspace, name: str, *, dry_run: bool, now: int | None) ->
         created_unix=stamp,
     )
     target = _fork_path(ws, name)
+    crypto_mod.require_can_sign(identity)
     if dry_run:
         parent_label = parent_id if parent_id else "none"
         print(f"dry-run: would sign fork {name} parent {parent_label}")

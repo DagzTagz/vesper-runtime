@@ -20,7 +20,7 @@ Technically yes, because `workspace/` is listed in `.gitignore`, so a normal `gi
 
 ## Why is the key file named edcsa-p256.priv?
 
-It is a historical typo. `edcsa` is ECDSA spelled wrong, and that spelling is the v0.1 filename. Do not rename it. If the `ecdsa` package did not import, the secret file is `identity/hmac.key` instead, and `edcsa-p256.priv` is not created.
+It is a historical typo. `edcsa` is ECDSA spelled wrong, and that spelling is the v0.1 filename. Do not rename it. In an older workspace made when the `ecdsa` package did not import (or one made with `VESPER_INSECURE_ALLOW_HMAC_FALLBACK=1`), the secret file is `identity/hmac.key` instead, and `edcsa-p256.priv` is not created.
 
 ## Why did verify exit 2 on the forged file?
 

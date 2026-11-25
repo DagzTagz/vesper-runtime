@@ -2,7 +2,7 @@
 
 Unofficial DagzTagz project. Not an xAI, SpaceXAI, or Grok product. This runtime does not call the Grok API.
 
-vesper-runtime is a local development and provenance tool. It signs JSON with ECDSA P-256, or with HMAC-SHA256 if the `ecdsa` package cannot be imported. You type commands in a terminal. The notes and the key stay in a folder you name.
+vesper-runtime is a local development and provenance tool. It signs JSON with ECDSA P-256. HMAC-SHA256 is used only if the `ecdsa` package cannot be imported **and** you set `VESPER_INSECURE_ALLOW_HMAC_FALLBACK=1`. You type commands in a terminal. The notes and the key stay in a folder you name.
 
 This document is not legal advice. The license is the warranty text. You are responsible for the key and the files.
 
@@ -84,7 +84,7 @@ These are the failures the program is written against. A plain version, includin
 - Signed bytes: UTF-8 JSON, `sort_keys=True`, separators `(',', ':')`, no NaN or Infinity. ECDSA signs the 32-byte SHA-256 digest with `sign_digest` and DER encoding. The stored signature is hex.
 - Key id: first 16 hex characters of SHA-256 over the uncompressed public point (`0x04 || X || Y`). The truncation identifies a key. The signature is the check.
 - On-disk name: `identity/edcsa-p256.priv`. The spelling `edcsa` is the v0.1 name. Do not rename it in this version. Directory mode `0700`. File mode `0600`. `public.json` is `0644` and contains the kid, the algorithm, and the public point hex. It does not contain a PEM block.
-- Fallback: if `import ecdsa` fails, the kernel writes `identity/hmac.key` and authenticates the canonical bytes with HMAC-SHA256. `public.json` then stores the kid only. HMAC verify loads that key from the workspace. ECDSA verify uses the public point inside the fork file. Dry-run init prints the filename that matches this choice.
+- Fallback, opt-in only: if `import ecdsa` fails, `init` refuses to create a key unless `VESPER_INSECURE_ALLOW_HMAC_FALLBACK=1` is set. With it, the kernel writes `identity/hmac.key`, warns on standard error, and authenticates the canonical bytes with HMAC-SHA256. An HMAC key is a shared secret: anyone who can verify with it can forge. An existing HMAC workspace is verify-only without the opt-in (`fork` refuses to sign). Before 2026-11-25 this fallback was silent. `public.json` then stores the kid only. HMAC verify loads that key from the workspace. ECDSA verify uses the public point inside the fork file. Dry-run init prints the filename that matches this choice.
 - Two secret files in one identity directory are refused. An existing identity directory is not overwritten.
 - Tests generate keys in a temporary directory. pytest is set to keep none of those directories (`tmp_path_retention_policy = none`). Do not commit a key so a test can stay offline.
 - A killed test run can still leave a key under `/tmp/pytest-of-*`. Shred the key file, then remove that tree, before you pack a release. `shred -u -n 1` overwrites the named file once and unlinks it. On an SSD, a copy-on-write disk, or some VM disks, that overwrite may not reach the old blocks. This tool does not wipe free space.
