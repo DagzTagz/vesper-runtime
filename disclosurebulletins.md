@@ -82,7 +82,7 @@ Status is one of these words:
 - **Status:** `accepted` for v0.1. The Dependabot alert was still `open` on GitHub when this bulletin was written. Dismissing that alert later would clear the badge only.
 - **Published:** 2024-01-22 upstream. Noted here on 2026-09-30.
 - **Updated:** 2026-09-30.
-- **Source:** [GitHub advisory](https://github.com/advisories/GHSA-wj6h-64fc-37mp), [python-ecdsa advisory](https://github.com/tlsfuzzer/python-ecdsa/security/advisories/GHSA-wj6h-64fc-37mp), [this repository's alert](https://github.com/DagzTagz/vesper-runtime/security/dependabot/1), [NVD CVE-2024-23342](https://nvd.nist.gov/vuln/detail/CVE-2024-23342). The library's own [SECURITY.md](https://github.com/tlsfuzzer/python-ecdsa/blob/master/SECURITY.md) says side channels are out of scope.
+- **Source:** [GitHub advisory](https://github.com/advisories/GHSA-wj6h-64fc-37mp), [python-ecdsa advisory](https://github.com/tlsfuzzer/python-ecdsa/security/advisories/GHSA-wj6h-64fc-37mp), [NVD CVE-2024-23342](https://nvd.nist.gov/vuln/detail/CVE-2024-23342). The library's own [SECURITY.md](https://github.com/tlsfuzzer/python-ecdsa/blob/master/SECURITY.md) says side channels are out of scope.
 - **Component:** PyPI package `ecdsa` (`python-ecdsa`), ecosystem pip. This program declares it in `pyproject.toml` as `ecdsa>=0.19.1`. The import is confined to `src/vesper/crypto.py`.
 - **Versions:** upstream says `>= 0`. That means every published release, including the `0.19.2` copy installed in this checkout's virtual environment on 2026-09-30.
 - **Patched versions:** none. The maintainers have said they do not plan a fix.
