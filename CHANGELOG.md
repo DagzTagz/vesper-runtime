@@ -14,6 +14,10 @@ The roles this tool does not fill are in [getting-started.md](getting-started.md
 
 ## [Unreleased]
 
+### Docs
+
+- DB-001 in [disclosurebulletins.md](disclosurebulletins.md) no longer links to this repository's Dependabot alert page, which is not publicly reachable. The public GitHub advisory, upstream advisory, and NVD CVE links remain.
+
 ---
 
 ## [0.2.0] - 2026-11-25
