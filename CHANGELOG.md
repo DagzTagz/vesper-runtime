@@ -2,7 +2,7 @@
 
 All notable changes to **vesper-runtime** are documented here.
 
-The package version in this tree is still 0.1.0. The README status line stays **v0.1.0 experimental**. The unreleased notes below are the working tree after the published 0.1.0 commit.
+The package version in this tree is 0.2.0. The README status line is **v0.2.0 experimental**.
 
 This project is early and iterative. It is not a finished product. Versions follow [Semantic Versioning](https://semver.org/) while pre-1.0. `0.x` may break.
 
@@ -13,6 +13,10 @@ The roles this tool does not fill are in [getting-started.md](getting-started.md
 ---
 
 ## [Unreleased]
+
+---
+
+## [0.2.0] - 2026-11-25
 
 ### Security
 
