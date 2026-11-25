@@ -33,6 +33,7 @@ The roles this tool does not fill are in [getting-started.md](getting-started.md
 
 ### Docs
 
+- 2026-11-25: [docs/threat-model.md](docs/threat-model.md) now says plainly that agents sharing one operating-system account share one signing key, that ECDSA `verify` does not by itself say which agent's key signed, and how to give each agent its own account, workspace, and pinned `kid`. The README and [docs/workspace.md](docs/workspace.md) link to it. (Residual item from the shared-compute review.)
 - 2026-09-30: rewrote the human guides and added [docs/glossary.md](docs/glossary.md), [docs/commands.md](docs/commands.md), [docs/workspace.md](docs/workspace.md), [docs/schema.md](docs/schema.md), [docs/memory.md](docs/memory.md), [docs/forks.md](docs/forks.md), [docs/audit-export.md](docs/audit-export.md), [docs/threat-model.md](docs/threat-model.md), and [docs/faq.md](docs/faq.md).
 - 2026-09-30: added [disclosurebulletins.md](disclosurebulletins.md). The first entry records the `python-ecdsa` P-256 timing advisory, GHSA-wj6h-64fc-37mp, which has no patched release.
 - 2026-09-30: rewrote [docs/audit-export.md](docs/audit-export.md) so each exported file, plan promise, critic heading, and score check is explained in plain language.

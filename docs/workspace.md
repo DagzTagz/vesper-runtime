@@ -54,6 +54,7 @@ These modes are checked exactly. A directory at `2700`, or a key at `0640`, is r
 | `/tmp` | Other accounts share it, and the system may delete it on reboot. Mode `0700` does not stop a temporary cleaner from removing the key. |
 | A FAT or exFAT USB stick | Those filesystems do not store Unix modes. Init tries to set `0700` and `0600`. If the stick cannot keep them, the next load refuses the key and exits `3`. Do not chmod the file on a disk that will forget the mode. |
 | A cloud-sync folder | The sync may upload `edcsa-p256.priv` or `hmac.key`, and the copy may not keep mode `0600`. The program cannot delete that remote copy. |
+| A workspace several agents use under one account | Every program running as that account can read the key and sign. The modes do not separate them. Give each agent its own account and workspace; see [threat-model.md](threat-model.md#one-operating-system-account-means-one-shared-key). |
 
 `shred -u -n 1` overwrites the named local file once and unlinks it. It does not wipe a cloud copy. On an SSD, a copy-on-write disk, or some VM disks, it may not reach the old blocks. This program does not wipe free space.
 

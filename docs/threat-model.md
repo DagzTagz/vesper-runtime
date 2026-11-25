@@ -13,6 +13,22 @@ The program is written against four neighbors of the folder.
 
 It is not a defense against the root account, a stolen unlocked session, or a disk image taken while the key file is open. Mode `0700` and mode `0600` are the sharing rules. The program does not listen on the network, so these rows do not describe a remote attacker.
 
+## One operating-system account means one shared key
+
+The modes `0700` and `0600` separate **accounts**, not programs. Every process that runs as the same operating-system user can open `identity/` and read the private key. So if several agents, scripts, or CI jobs run as one account (a shared service account, one container user, one runner user), they all hold the same signing key. Any of them can sign a snapshot that `verify` accepts, and a signature cannot tell you which of them made it. Nothing in this program can separate them, because the operating system does not.
+
+One more limit matters when you compare agents. ECDSA `verify` checks a snapshot against the public key inside that same file. It proves the file was not edited after it was signed by **that** key. It does not prove the key belongs to a particular agent. To know who signed, keep a list of each agent's `kid` (from its `identity/public.json`) somewhere the agents cannot write, and compare the `kid` in each snapshot with that list.
+
+### How to give each agent its own key
+
+1. **One account per agent.** On Linux, for example: `sudo useradd --create-home agent-a`, then `sudo chmod 700 /home/agent-a`. Repeat for each agent. In containers, run each agent with its own non-root user id, and do not mount one agent's home or workspace into another's container.
+2. **One workspace per agent, made by that account.** For example: `sudo -u agent-a -H vesper init --workspace /home/agent-a/vesper --callsign agent-a`. Check with `ls -ld /home/agent-a/vesper/identity` that it is owned by `agent-a` with mode `drwx------`.
+3. **Never share or copy `identity/`.** Do not put workspaces on a shared drive, in a group-writable folder, or in a cloud-sync folder. Do not run agents as root, which can read every key.
+4. **Pin each agent's `kid`.** Copy each `identity/public.json` (it holds no secret) into a list that only you can write. When you check a snapshot, run `vesper verify` and also confirm its `kid` is the one you expect for that agent.
+5. **Keep the `ecdsa` package installed.** With an HMAC key, anyone who can verify can also forge, so per-agent accounts would not help a reviewer who holds the key. vesper refuses to create an HMAC key unless you opt in.
+
+If you cannot give agents separate accounts, treat every snapshot from that account as "made by one of the programs that run as it", not by a named agent.
+
 `verify` does not turn a matching stamp into a legal identity. It tells you the file still matches the public point stored in that file, for ECDSA, or the workspace HMAC key, for HMAC.
 
 ## T1 through T8

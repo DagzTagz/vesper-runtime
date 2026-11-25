@@ -64,6 +64,10 @@ What good looks like: pytest prints a line that ends in `passed` and exits 0. `v
 
 What failure means: if `vesper` is not found, the virtual environment is not active. Run `source .venv/bin/activate` again. `which python` should point inside `.venv`. If pytest prints `failed`, stop and read the failing test name before you create a key.
 
+## Running several agents
+
+Agents that run under the same operating-system account share one signing key. The folder modes keep **other accounts** out, but every program running as you can read `identity/` and sign as you. If you run several agents (or CI jobs) and want to know which one signed a snapshot, give each agent its own account and its own workspace, and keep a list of each agent's key id (`kid`). The short how-to is in [docs/threat-model.md](docs/threat-model.md#how-to-give-each-agent-its-own-key).
+
 ## Docs map
 
 `vesper export` writes an audit folder. That folder is a record of the checks, and it is meant to be read without the chat that produced the notes. Leave folders a skeptic can audit.
