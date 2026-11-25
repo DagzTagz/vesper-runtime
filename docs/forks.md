@@ -33,10 +33,25 @@ The file you open in an editor is pretty-printed, with sorted keys, an indent of
 
 | | ECDSA, the normal case | HMAC, the fallback |
 |--|------------------------|--------------------|
-| When it is used | The `ecdsa` package imports. | `import ecdsa` fails. |
+| When it is used | The `ecdsa` package imports. | `import ecdsa` fails **and** `VESPER_INSECURE_ALLOW_HMAC_FALLBACK=1` is set. Without that opt-in, `init` refuses to create an HMAC key and `fork` refuses to sign with one. Verifying an existing HMAC snapshot still works without it. |
 | What is signed | SHA-256 of the canonical body. The 32-byte digest is signed with `SigningKey.sign_digest`, DER-encoded with `sigencode_der`, and stored as hex. | HMAC-SHA256 of the canonical bytes themselves, stored as hex. The bare digest is not what HMAC covers. |
 | What verify needs | The public point in `public_key_hex`. The workspace and the private key are not required. | The secret file `identity/hmac.key` in the workspace. The program loads that file only after it reads `algo` and sees `hmac-sha256`. |
 | A mismatched key id | Reason `kid`, before the stamp is treated as `bad_signature`. | Reason `kid` when the workspace key's id does not match `kid`. A missing workspace key is `bad_signature`. |
+
+## Moving off an HMAC key
+
+An HMAC key is a shared secret. The same file that verifies a snapshot can make one, so an HMAC signature says "someone who could read `identity/hmac.key` made this", not "the owner of this workspace made this". Since the 2026-11-25 change vesper treats an HMAC workspace as **verify-only**:
+
+- `vesper verify` and `verify --head` keep working on its snapshots. That needs the workspace key, as before.
+- `vesper fork` refuses to sign: `this workspace has an HMAC key ... vesper now refuses to sign with it`. Nothing is written.
+- `VESPER_INSECURE_ALLOW_HMAC_FALLBACK=1` brings back signing with that key, with a warning on every use. Use it only while you move.
+
+There is no in-place conversion, because an ECDSA snapshot needs a new key and the parent links of old snapshots name the old key. To move:
+
+1. Install the dependency: `pip install 'ecdsa>=0.19.1'` (or `pip install -e .`, which already lists it).
+2. Make a new workspace with `vesper init --workspace NEW --callsign NAME`. Check that `NEW/identity/edcsa-p256.priv` exists and `hmac.key` does not.
+3. Bring the notes you need across with `vesper remember` in the new workspace, then sign from there.
+4. Keep the old workspace, and its `hmac.key`, at mode `0600`, for as long as you need to verify its old snapshots. Treat those snapshots as "made by anyone who could read that key".
 
 ## The parent link
 

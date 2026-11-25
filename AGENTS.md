@@ -6,7 +6,7 @@ You may author code under the operator’s account and terms. DagzTagz owns the 
 
 ## Hard rules
 
-- Python 3.11+. Standard library plus the `ecdsa` dependency, imported only inside `src/vesper/crypto.py`. If that import fails, HMAC is the fallback.
+- Python 3.11+. Standard library plus the `ecdsa` dependency, imported only inside `src/vesper/crypto.py`. If that import fails, `init` and `fork` refuse with an install hint. HMAC is used only when a human sets `VESPER_INSECURE_ALLOW_HMAC_FALLBACK=1`; do not set it yourself.
 - No numpy, no web framework, no cloud SDK, no extra packages.
 - No network from tests or from the CLI.
 - `crypto.py` is the only module that touches private key bytes.

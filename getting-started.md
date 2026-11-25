@@ -68,7 +68,7 @@ vesper init --workspace ./workspace --callsign nova --dry-run
 test ! -e workspace && echo "no files written"
 ```
 
-What good looks like: several lines that start with `dry-run: would`. On a normal install the private-key line names `identity/edcsa-p256.priv` at mode `0600`. If Python cannot import `ecdsa`, that line names `identity/hmac.key` instead. Then the shell prints `no files written`. The spelling `edcsa` in `edcsa-p256.priv` is the v0.1 filename. Leave it spelled that way.
+What good looks like: several lines that start with `dry-run: would`. On a normal install the private-key line names `identity/edcsa-p256.priv` at mode `0600`. If Python cannot import `ecdsa`, init stops with exit `2` and tells you to install it (`pip install 'ecdsa>=0.19.1'`). Then the shell prints `no files written`. The spelling `edcsa` in `edcsa-p256.priv` is the v0.1 filename. Leave it spelled that way.
 
 What failure means: exit 1 and `usage:` means `--workspace` or `--callsign` was missing, or the two workspace flags disagreed. Exit 2 means the callsign has a character the program will not store, or `--user-weight` is outside `(0, 2]`.
 
@@ -94,7 +94,7 @@ What good looks like: the first command prints `initialized` and a path, and exi
 
 The callsign `nova` is stored as character id `char-nova`. The universe id is `uni-nova`. `straussian_level` is `1`. Init is the only command that sets that level.
 
-If `ecdsa` did not import, the secret file is `workspace/identity/hmac.key` at mode `600`, and `edcsa-p256.priv` is absent. Exactly one of those secret files should exist.
+An older workspace, or one made with `VESPER_INSECURE_ALLOW_HMAC_FALLBACK=1` when `ecdsa` did not import, has `workspace/identity/hmac.key` at mode `600` instead, and `edcsa-p256.priv` is absent. That workspace is verify-only now; see [docs/forks.md](docs/forks.md#moving-off-an-hmac-key). Exactly one of those secret files should exist.
 
 What failure means: exit 3 and `identity already exists` means this folder was already initialized. Do not delete the key to retry unless you mean to destroy it. Use the backup or destroy steps at the end of this page. Exit 3 and `refusing key that is not mode 0600` means the filesystem did not keep mode `0600`. Stop. Do not chmod the file and continue.
 

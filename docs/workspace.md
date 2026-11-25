@@ -22,7 +22,7 @@ workspace/                         # mode 0700; only you can list it
 
 `public.json` then contains `algo` `ecdsa-p256`, `curve` `secp256r1`, `kid`, and `public_key_hex`. It does not contain a PEM block. The private file is PEM text from the `ecdsa` library. Leave it closed.
 
-If `import ecdsa` fails, init writes `identity/hmac.key` instead. That file is 32 random bytes at mode `0600`. `public.json` then contains `algo` `hmac-sha256`, `hmac_kid`, and `kid`. It has no public point, and `edcsa-p256.priv` is not created.
+If `import ecdsa` fails, init stops with an error and writes nothing, unless you set `VESPER_INSECURE_ALLOW_HMAC_FALLBACK=1`. With that opt-in (and a warning on standard error), init writes `identity/hmac.key` instead. That file is 32 random bytes at mode `0600`. `public.json` then contains `algo` `hmac-sha256`, `hmac_kid`, and `kid`. It has no public point, and `edcsa-p256.priv` is not created.
 
 Exactly one secret file is allowed. If both `edcsa-p256.priv` and `hmac.key` are present, the next load exits `3` with `identity directory has two key files`. Init also refuses an `identity/` directory that already exists. It does not overwrite the key.
 

@@ -9,9 +9,13 @@ ECDSA P-256 (secp256r1), when the `ecdsa` package imports:
   public point (0x04 || X || Y). Truncation is an identifier, not a proof.
   The signature is the proof.
 
-HMAC-SHA256 fallback, only when `ecdsa` does not import:
+HMAC-SHA256 fallback, only when `ecdsa` does not import AND the operator set
+VESPER_INSECURE_ALLOW_HMAC_FALLBACK=1:
   HMAC over the canonical bytes (the bytes, not the raw digest alone).
   The key file is identity/hmac.key. public.json stores the kid only.
+  An HMAC key is a shared secret: whoever can verify a fork can also forge
+  one. Without the opt-in, vesper refuses to create an HMAC key and refuses
+  to sign with an existing one. Verifying existing HMAC forks still works.
 
 Key files are opened with O_NOFOLLOW. Mode is checked with fstat on that
 same descriptor. A mode other than 0600 is refused and is not repaired.
@@ -24,6 +28,7 @@ import hmac
 import json
 import os
 import stat
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, ClassVar
@@ -38,6 +43,47 @@ from vesper.paths import (
 )
 
 _ECDSA: dict[str, Any] | None | bool = None
+
+# Loudly named on purpose. "1" is the only value that opts in.
+INSECURE_HMAC_ENV = "VESPER_INSECURE_ALLOW_HMAC_FALLBACK"
+
+MISSING_ECDSA_MESSAGE = (
+    "the `ecdsa` package is not installed, so vesper cannot create an ECDSA "
+    "signing key. Install it: pip install 'ecdsa>=0.19.1'. vesper no longer "
+    "falls back to an HMAC key on its own, because an HMAC key is a shared "
+    "secret: anyone who can verify a fork with it can also forge one. To accept "
+    f"that anyway, set {INSECURE_HMAC_ENV}=1."
+)
+HMAC_SIGN_REFUSED_MESSAGE = (
+    "this workspace has an HMAC key (identity/hmac.key), a shared secret: anyone "
+    "who can read it can forge forks. vesper now refuses to sign with it. "
+    "Existing forks still verify. To move to ECDSA, install `ecdsa` and start a "
+    "new workspace with `vesper init` (see docs/forks.md, 'Moving off an HMAC "
+    f"key'). To keep signing with this key anyway, set {INSECURE_HMAC_ENV}=1."
+)
+INSECURE_WARNING = (
+    "vesper: WARNING: using an HMAC shared-secret key because "
+    f"{INSECURE_HMAC_ENV}=1. Anyone who can verify these forks can forge them."
+)
+
+
+def hmac_fallback_allowed() -> bool:
+    """True only when the operator explicitly opted in to HMAC keys."""
+    return os.environ.get(INSECURE_HMAC_ENV) == "1"
+
+
+def require_signing_backend() -> None:
+    """Raise CryptoError before anything is written when no safe key type is available."""
+    if not ecdsa_available() and not hmac_fallback_allowed():
+        raise CryptoError(MISSING_ECDSA_MESSAGE)
+
+
+def require_can_sign(identity: Identity) -> None:
+    """Raise CryptoError for an HMAC identity unless the operator opted in."""
+    if isinstance(identity, HmacIdentity):
+        if not hmac_fallback_allowed():
+            raise CryptoError(HMAC_SIGN_REFUSED_MESSAGE)
+        print(INSECURE_WARNING, file=sys.stderr)
 
 
 def ecdsa_available() -> bool:
@@ -142,6 +188,9 @@ class HmacIdentity:
         )
 
     def sign_canonical(self, body: dict[str, Any]) -> str:
+        # Defense in depth: callers check require_can_sign first.
+        if not hmac_fallback_allowed():
+            raise CryptoError(HMAC_SIGN_REFUSED_MESSAGE)
         return hmac.new(self._key, canonical_bytes(body), hashlib.sha256).hexdigest()
 
 
@@ -266,7 +315,13 @@ def _public_key_kid(public_key_hex: str) -> str:
 
 
 def generate_identity(identity_dir: Path) -> Identity:
-    """Create identity_dir at 0700 and a new key at 0600."""
+    """Create identity_dir at 0700 and a new key at 0600.
+
+    ECDSA when `ecdsa` imports. Otherwise HMAC only with the explicit
+    VESPER_INSECURE_ALLOW_HMAC_FALLBACK=1 opt-in; without it, raise before
+    anything is created.
+    """
+    require_signing_backend()
     create_private_dir(identity_dir)
     if ecdsa_available():
         backend = _load_ecdsa()
@@ -286,6 +341,7 @@ def generate_identity(identity_dir: Path) -> Identity:
         _write_public(identity_dir / PUBLIC_FILENAME, public)
         return EcdsaIdentity(kid, uncompressed.hex(), public, key)
 
+    print(INSECURE_WARNING, file=sys.stderr)
     key_bytes = os.urandom(32)
     _write_secret(identity_dir / HMAC_KEY_FILENAME, key_bytes)
     kid = sha256_hex(key_bytes)[:16]

@@ -14,6 +14,10 @@ The roles this tool does not fill are in [getting-started.md](getting-started.md
 
 ## [Unreleased]
 
+### Security
+
+- **Breaking: no silent HMAC fallback.** When the `ecdsa` package did not import, `init` used to create a shared-secret HMAC key (`identity/hmac.key`) without saying so. With an HMAC key, anyone who can verify a snapshot can also forge one. Now `init` (and `--dry-run init`) exits `2` with a message to install `ecdsa` and writes nothing, unless the loudly named `VESPER_INSECURE_ALLOW_HMAC_FALLBACK=1` is set, which prints a warning on every use. An existing HMAC workspace is verify-only: `verify` keeps working, and `fork` refuses to sign without the opt-in. The move to ECDSA is in [docs/forks.md](docs/forks.md#moving-off-an-hmac-key). (Residual item from the shared-compute review.)
+
 ### Fixed
 
 - State-machine audit, November 2026. Details are in [docs/security/state-machine-audit-2026-11.md](docs/security/state-machine-audit-2026-11.md) and DB-002.

@@ -31,6 +31,7 @@ def test_ecdsa_identity_round_trip(tmp_path: Path) -> None:
 
 def test_hmac_identity_round_trip(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(crypto, "ecdsa_available", lambda: False)
+    monkeypatch.setenv(crypto.INSECURE_HMAC_ENV, "1")
     made = generate_identity(tmp_path / "identity")
     assert isinstance(made, HmacIdentity)
     assert made.public_key_hex is None

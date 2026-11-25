@@ -52,3 +52,15 @@ Existing forks, keys and workspaces keep working, with these exceptions:
 - `init` refuses a foreign `state.json`, and a partial workspace unless `--resume` is passed.
 - Code that builds `Identity(...)` or `VerifyResult(...)` directly must use the new classes. The CLI does not.
 - Workspaces can now contain `.lock`, `.fork-pending.json` and `.init-in-progress`. See [docs/workspace.md](../workspace.md).
+
+## Follow-up, 2026-11-25: residual items from the shared-compute review
+
+**Status: Open** (pull requests pending review).
+
+| Item | What was left | Change |
+|---|---|---|
+| Silent HMAC fallback | If `ecdsa` did not import, `init` made a shared-secret HMAC key without saying so. Anyone who can verify with it can forge. | `init` refuses without `ecdsa` unless `VESPER_INSECURE_ALLOW_HMAC_FALLBACK=1`. Existing HMAC workspaces are verify-only. See [docs/forks.md](../forks.md#moving-off-an-hmac-key). |
+| One account, one key | Agents that run under the same operating-system account can all read `identity/` and sign as that workspace. The `0700`/`0600` modes do not separate them. | Documented in [docs/threat-model.md](../threat-model.md), with a how-to for one account and one key per agent. |
+
+**Breaking:** a machine without `ecdsa` can no longer create or sign with a vesper key unless `VESPER_INSECURE_ALLOW_HMAC_FALLBACK=1` is set.
+
