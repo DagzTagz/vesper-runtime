@@ -55,7 +55,7 @@ Existing forks, keys and workspaces keep working, with these exceptions:
 
 ## Follow-up, 2026-11-25: residual items from the shared-compute review
 
-**Status: Open** (pull requests pending review).
+**Status: Merged.** Silent HMAC fallback: [vesper-runtime#3](https://github.com/DagzTagz/vesper-runtime/pull/3), merge [`b89579c`](https://github.com/DagzTagz/vesper-runtime/commit/b89579c4fb785ab2d3f0b58809b02fd272c82581) (fix [`9bfbafd`](https://github.com/DagzTagz/vesper-runtime/commit/9bfbafd3f0083b4a5f746cde4d0779d0d2f74198)). One account, one key: [vesper-runtime#4](https://github.com/DagzTagz/vesper-runtime/pull/4), merge [`d216686`](https://github.com/DagzTagz/vesper-runtime/commit/d21668654f577cd44ca3cc6cf5c2bf387cefa583) (fix [`3d8de1e`](https://github.com/DagzTagz/vesper-runtime/commit/3d8de1ee141fb38f104200856c046322abf8f618)).
 
 | Item | What was left | Change |
 |---|---|---|

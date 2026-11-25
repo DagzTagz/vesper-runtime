@@ -2,7 +2,7 @@
 
 Unofficial DagzTagz project. Not an xAI, SpaceXAI, or Grok product. This runtime does not call the Grok API.
 
-**Status:** v0.1.0 experimental
+**Status:** v0.2.0 experimental
 
 ## What this is
 

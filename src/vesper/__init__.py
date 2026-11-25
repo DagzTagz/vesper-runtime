@@ -3,4 +3,4 @@
 Unofficial community project. This package does not call a model API.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
